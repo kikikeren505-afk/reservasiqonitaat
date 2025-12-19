@@ -24,6 +24,7 @@ interface Reservasi {
 
 export default function ReservasiPage() {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [reservasi, setReservasi] = useState<Reservasi[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
@@ -58,6 +59,12 @@ export default function ReservasiPage() {
       router.push('/login');
     }
   }, [router]);
+
+  useEffect(() => {
+    if (!loading) {
+      setTimeout(() => setMounted(true), 100);
+    }
+  }, [loading]);
 
   const fetchReservasi = async (userId: number) => {
     try {
@@ -157,13 +164,23 @@ export default function ReservasiPage() {
 
   return (
     <div style={styles.container}>
-      <div style={styles.header}>
+      <div style={{
+        ...styles.header,
+        opacity: mounted ? 1 : 0,
+        transform: mounted ? 'translateY(0)' : 'translateY(-20px)',
+        transition: 'all 0.8s ease-out',
+      }}>
         <h1 style={styles.title}>Reservasi Saya</h1>
         <p style={styles.subtitle}>Kelola dan pantau reservasi kost Anda</p>
       </div>
 
       {error && (
-        <div style={styles.errorAlert}>
+        <div style={{
+          ...styles.errorAlert,
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'scale(1)' : 'scale(0.95)',
+          transition: 'all 0.5s ease-out 0.2s',
+        }}>
           <span style={styles.errorIcon}>⚠️</span>
           <div>
             <strong>Error:</strong> {error}
@@ -172,24 +189,58 @@ export default function ReservasiPage() {
       )}
 
       {reservasi.length === 0 ? (
-        <div style={styles.emptyState}>
+        <div style={{
+          ...styles.emptyState,
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'scale(1)' : 'scale(0.95)',
+          transition: 'all 0.8s ease-out 0.3s',
+        }}>
           <div style={styles.emptyIcon}>📋</div>
           <h2 style={styles.emptyTitle}>Belum Ada Reservasi</h2>
           <p style={styles.emptyText}>
             Anda belum memiliki reservasi. Mulai cari kost yang sesuai dengan kebutuhan Anda.
           </p>
-          <a href="/kost" style={styles.browseBtn}>
+          <a 
+            href="/kost" 
+            style={styles.browseBtn}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#1d4ed8';
+              e.currentTarget.style.transform = 'translateY(-3px)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.4)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = '#2563eb';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
             Cari Kost Sekarang
           </a>
         </div>
       ) : (
         <div style={styles.reservasiList}>
-          {reservasi.map((item) => (
-            <div key={item.id} style={styles.reservasiCard}>
+          {reservasi.map((item, index) => (
+            <div 
+              key={item.id} 
+              style={{
+                ...styles.reservasiCard,
+                opacity: mounted ? 1 : 0,
+                transform: mounted ? 'translateY(0)' : 'translateY(30px)',
+                transition: `all 0.6s ease-out ${0.3 + index * 0.15}s`,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-5px)';
+                e.currentTarget.style.boxShadow = '0 8px 20px rgba(0,0,0,0.15)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+              }}
+            >
               <div style={styles.cardHeader}>
                 <div>
                   <h3 style={styles.kostName}>
-                    {item.nama_kost || 'Kost ID: ' + item.kost_id}
+                    {item.nama_kost || 'Kost Pondok Qonitaat - Class ' + item.kost_id}
                   </h3>
                   {item.alamat_kost && (
                     <p style={styles.kostLocation}>📍 {item.alamat_kost}</p>
@@ -358,7 +409,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     textDecoration: 'none',
     borderRadius: '10px',
     fontWeight: 600,
-    transition: 'all 0.3s',
+    transition: 'all 0.3s ease',
+    cursor: 'pointer',
   },
   reservasiList: {
     display: 'flex',
@@ -370,6 +422,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '15px',
     overflow: 'hidden',
     boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    transition: 'all 0.3s ease',
+    cursor: 'pointer',
   },
   cardHeader: {
     display: 'flex',
@@ -383,6 +437,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1.5rem',
     color: '#333',
     marginBottom: '0.25rem',
+    fontWeight: 'bold',
   },
   kostLocation: {
     color: '#666',

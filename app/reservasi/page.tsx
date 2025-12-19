@@ -1,4 +1,5 @@
 // Lokasi: app/reservasi/page.tsx
+// ✅ PERUBAHAN: Ganti handleSubmit dan tambah fetch harga kost real
 
 'use client';
 
@@ -10,6 +11,10 @@ export default function ReservasiPage() {
   const router = useRouter();
   const kostId = searchParams.get('kost_id');
 
+  const [mounted, setMounted] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [kostData, setKostData] = useState<any>(null);
+  const [loadingKost, setLoadingKost] = useState(true);
   const [formData, setFormData] = useState({
     nama: '',
     email: '',
@@ -24,13 +29,75 @@ export default function ReservasiPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const kostOptions = [
-    { id: '1', nama: 'Class 1', harga: 'Rp 12.000.000' },
-    { id: '2', nama: 'Class 2', harga: 'Rp 10.000.000' },
-    { id: '3', nama: 'Class 3', harga: 'Rp 8.000.000' }
-  ];
+  useEffect(() => {
+    setMounted(true);
+    
+    // ✅ Ambil data user dari storage
+    const userData = sessionStorage.getItem('user') || localStorage.getItem('user');
+    if (userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+        
+        // Auto-fill form dengan data user jika ada
+        setFormData(prev => ({
+          ...prev,
+          nama: parsedUser.name || '',
+          email: parsedUser.email || '',
+        }));
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+      }
+    }
 
-  const selectedKost = kostOptions.find(k => k.id === formData.kost_id);
+    // ✅ Fetch data kost dari database
+    fetchKostData();
+  }, []);
+
+  // ✅ FUNGSI BARU: Fetch data kost real dari API
+  const fetchKostData = async () => {
+    try {
+      setLoadingKost(true);
+      const response = await fetch('/api/admin/kost', {
+        cache: 'no-store',
+      });
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setKostData(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching kost:', error);
+    } finally {
+      setLoadingKost(false);
+    }
+  };
+
+  // ✅ Mapping data kost dari database
+  const kostOptions = kostData ? kostData.map((k: any) => ({
+    id: k.id.toString(),
+    nama: k.nama,
+    harga: k.harga,
+    alamat: k.alamat
+  })) : [];
+
+  const selectedKost = kostOptions.find((k: any) => k.id === formData.kost_id);
+
+  // ✅ Hitung total harga berdasarkan durasi
+  const calculateTotal = () => {
+    if (!selectedKost) return 0;
+    const hargaPerTahun = selectedKost.harga;
+    const durasi = parseInt(formData.durasi);
+    return Math.round((hargaPerTahun / 12) * durasi);
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+    }).format(amount);
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({
@@ -39,35 +106,94 @@ export default function ReservasiPage() {
     });
   };
 
+  // ✅ FUNGSI SUBMIT YANG DIPERBAIKI - KIRIM KE API REAL
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validasi user login
+    if (!user || !user.id) {
+      alert('Anda harus login terlebih dahulu!');
+      router.push('/login');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      // TODO: Send to API
-      console.log('Reservasi data:', formData);
+      const totalHarga = calculateTotal();
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      setSuccess(true);
-      
-      // Redirect after 3 seconds
-      setTimeout(() => {
-        router.push('/dashboard');
-      }, 3000);
+      // ✅ Kirim data ke API
+      const response = await fetch('/api/reservasi', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: user.id,
+          kost_id: parseInt(formData.kost_id),
+          tanggal_mulai: formData.tanggal_mulai,
+          durasi_bulan: parseInt(formData.durasi),
+          total_harga: totalHarga,
+          catatan: formData.catatan || null
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        console.log('✅ Reservasi berhasil dibuat:', data);
+        setSuccess(true);
+        
+        // Refresh data dan redirect
+        router.refresh();
+        setTimeout(() => {
+          router.push('/dashboard/reservasi');
+        }, 2000);
+      } else {
+        alert(data.message || 'Gagal membuat reservasi. Silakan coba lagi.');
+      }
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error creating reservasi:', error);
       alert('Terjadi kesalahan. Silakan coba lagi.');
     } finally {
       setLoading(false);
     }
   };
 
+  if (loadingKost) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(to bottom, #f8fafc 0%, #e2e8f0 100%)',
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '50px',
+            height: '50px',
+            border: '4px solid #e2e8f0',
+            borderTop: '4px solid #667eea',
+            borderRadius: '50%',
+            margin: '0 auto 1rem',
+            animation: 'spin 1s linear infinite',
+          }}></div>
+          <p style={{ color: '#64748b' }}>Memuat data kost...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (success) {
     return (
       <div style={styles.container}>
-        <div style={styles.successCard}>
+        <div style={{
+          ...styles.successCard,
+          opacity: 1,
+          transform: 'scale(1)',
+          animation: 'successPop 0.6s ease-out',
+        }}>
           <div style={styles.successIcon}>✓</div>
           <h1 style={styles.successTitle}>Reservasi Berhasil!</h1>
           <p style={styles.successText}>
@@ -83,14 +209,27 @@ export default function ReservasiPage() {
 
   return (
     <div style={styles.container}>
-      <div style={styles.header}>
+      <div style={{
+        ...styles.header,
+        opacity: mounted ? 1 : 0,
+        transform: mounted ? 'translateY(0)' : 'translateY(-30px)',
+        transition: 'all 1s ease-out',
+      }}>
         <h1 style={styles.title}>Form Reservasi Kost</h1>
         <p style={styles.subtitle}>Lengkapi data di bawah ini untuk melakukan reservasi</p>
       </div>
 
       <div style={styles.content}>
         <div style={styles.grid}>
-          <form onSubmit={handleSubmit} style={styles.form}>
+          <form 
+            onSubmit={handleSubmit} 
+            style={{
+              ...styles.form,
+              opacity: mounted ? 1 : 0,
+              transform: mounted ? 'translateX(0)' : 'translateX(-30px)',
+              transition: 'all 0.8s ease-out 0.3s',
+            }}
+          >
             <h2 style={styles.sectionTitle}>Data Pribadi</h2>
 
             <div style={styles.formGroup}>
@@ -103,6 +242,14 @@ export default function ReservasiPage() {
                 required
                 style={styles.input}
                 placeholder="Masukkan nama lengkap sesuai KTP"
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#667eea';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#e2e8f0';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
               />
             </div>
 
@@ -116,6 +263,14 @@ export default function ReservasiPage() {
                 required
                 style={styles.input}
                 placeholder="nama@email.com"
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#667eea';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#e2e8f0';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
               />
             </div>
 
@@ -129,6 +284,14 @@ export default function ReservasiPage() {
                 required
                 style={styles.input}
                 placeholder="08xx-xxxx-xxxx"
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#667eea';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#e2e8f0';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
               />
             </div>
 
@@ -143,6 +306,14 @@ export default function ReservasiPage() {
                 maxLength={16}
                 style={styles.input}
                 placeholder="16 digit nomor KTP"
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#667eea';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#e2e8f0';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
               />
             </div>
 
@@ -156,10 +327,16 @@ export default function ReservasiPage() {
                 onChange={handleChange}
                 required
                 style={styles.select}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#667eea';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#e2e8f0';
+                }}
               >
-                {kostOptions.map(kost => (
+                {kostOptions.map((kost: any) => (
                   <option key={kost.id} value={kost.id}>
-                    {kost.nama} - {kost.harga} / Tahun
+                    {kost.nama} - {formatCurrency(kost.harga)} / Tahun
                   </option>
                 ))}
               </select>
@@ -175,6 +352,14 @@ export default function ReservasiPage() {
                 required
                 style={styles.input}
                 min={new Date().toISOString().split('T')[0]}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#667eea';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#e2e8f0';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
               />
             </div>
 
@@ -186,6 +371,12 @@ export default function ReservasiPage() {
                 onChange={handleChange}
                 required
                 style={styles.select}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#667eea';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#e2e8f0';
+                }}
               >
                 <option value="1">1 Bulan</option>
                 <option value="3">3 Bulan</option>
@@ -203,6 +394,14 @@ export default function ReservasiPage() {
                 rows={4}
                 style={styles.textarea}
                 placeholder="Tambahkan catatan atau permintaan khusus (opsional)"
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#667eea';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#e2e8f0';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
               />
             </div>
 
@@ -210,6 +409,18 @@ export default function ReservasiPage() {
               type="submit" 
               style={styles.submitButton}
               disabled={loading}
+              onMouseEnter={(e) => {
+                if (!loading) {
+                  e.currentTarget.style.transform = 'translateY(-3px)';
+                  e.currentTarget.style.boxShadow = '0 8px 20px rgba(16, 185, 129, 0.4)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!loading) {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }
+              }}
             >
               {loading ? '⏳ Memproses...' : '📝 Kirim Reservasi'}
             </button>
@@ -219,7 +430,12 @@ export default function ReservasiPage() {
             </p>
           </form>
 
-          <div style={styles.sidebar}>
+          <div style={{
+            ...styles.sidebar,
+            opacity: mounted ? 1 : 0,
+            transform: mounted ? 'translateX(0)' : 'translateX(30px)',
+            transition: 'all 0.8s ease-out 0.5s',
+          }}>
             <div style={styles.summaryCard}>
               <h3 style={styles.summaryTitle}>Ringkasan Reservasi</h3>
               
@@ -230,7 +446,7 @@ export default function ReservasiPage() {
 
               <div style={styles.summaryItem}>
                 <span style={styles.summaryLabel}>Harga:</span>
-                <span style={styles.summaryValue}>{selectedKost?.harga}</span>
+                <span style={styles.summaryValue}>{selectedKost ? formatCurrency(selectedKost.harga) : '-'}</span>
               </div>
 
               <div style={styles.summaryItem}>
@@ -255,7 +471,7 @@ export default function ReservasiPage() {
 
               <div style={styles.totalSection}>
                 <span style={styles.totalLabel}>Total Estimasi:</span>
-                <span style={styles.totalValue}>{selectedKost?.harga}</span>
+                <span style={styles.totalValue}>{formatCurrency(calculateTotal())}</span>
               </div>
 
               <p style={styles.summaryNote}>
@@ -283,6 +499,14 @@ export default function ReservasiPage() {
                 target="_blank"
                 rel="noopener noreferrer"
                 style={styles.whatsappButton}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
               >
                 💬 Chat WhatsApp
               </a>
@@ -294,6 +518,7 @@ export default function ReservasiPage() {
   );
 }
 
+// Styles tetap sama...
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
     minHeight: '100vh',
@@ -355,7 +580,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     border: '2px solid #e2e8f0',
     borderRadius: '8px',
     fontSize: '1rem',
-    transition: 'border-color 0.3s',
+    transition: 'all 0.3s ease',
+    outline: 'none',
   },
   select: {
     width: '100%',
@@ -365,6 +591,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1rem',
     cursor: 'pointer',
     backgroundColor: 'white',
+    transition: 'all 0.3s ease',
+    outline: 'none',
   },
   textarea: {
     width: '100%',
@@ -374,6 +602,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1rem',
     resize: 'vertical',
     fontFamily: 'inherit',
+    transition: 'all 0.3s ease',
+    outline: 'none',
   },
   submitButton: {
     width: '100%',
@@ -385,7 +615,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1.1rem',
     fontWeight: 'bold',
     cursor: 'pointer',
-    transition: 'transform 0.3s',
+    transition: 'all 0.3s ease',
   },
   note: {
     fontSize: '0.85rem',
@@ -494,6 +724,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '8px',
     textAlign: 'center',
     fontWeight: 'bold',
+    transition: 'all 0.3s ease',
+    cursor: 'pointer',
   },
   successCard: {
     maxWidth: '600px',

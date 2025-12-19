@@ -27,6 +27,7 @@ interface DashboardStats {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [stats, setStats] = useState<DashboardStats>({
     totalReservasi: 0,
@@ -52,10 +53,12 @@ export default function DashboardPage() {
       
       if (!userId) {
         setError('User ID tidak ditemukan. Silakan login kembali.');
+        setLoading(false);
         return;
       }
       
       fetchDashboardStats(userId);
+      setTimeout(() => setMounted(true), 100);
     } catch (error) {
       console.error('Error parsing user data:', error);
       router.push('/login');
@@ -122,26 +125,58 @@ export default function DashboardPage() {
   return (
     <div style={styles.pageWrapper}>
       {/* Fixed Sidebar */}
-      <aside style={styles.sidebar}>
+      <aside style={{
+        ...styles.sidebar,
+        opacity: mounted ? 1 : 0,
+        transform: mounted ? 'translateX(0)' : 'translateX(-30px)',
+        transition: 'all 0.8s ease-out',
+      }}>
         <div style={styles.sidebarHeader}>
           <h2 style={styles.logo}>🏠 Dashboard</h2>
         </div>
         <nav style={styles.nav}>
-          <a href="/dashboard" style={{...styles.navLink, ...styles.navLinkActive}}>
-            <span>🏠</span> Beranda
-          </a>
-          <a href="/dashboard/reservasi" style={styles.navLink}>
-            <span>📋</span> Reservasi Saya
-          </a>
-          <a href="/payments" style={styles.navLink}>
-            <span>💳</span> Pembayaran
-          </a>
-          <a href="/dashboard/profile" style={styles.navLink}>
-            <span>👤</span> Profil
-          </a>
+          {[
+            { href: '/dashboard', icon: '🏠', text: 'Beranda', active: true },
+            { href: '/dashboard/reservasi', icon: '📋', text: 'Reservasi Saya', active: false },
+            { href: '/payments', icon: '💳', text: 'Pembayaran', active: false },
+            { href: '/dashboard/profile', icon: '👤', text: 'Profil', active: false },
+          ].map((link, index) => (
+            <a 
+              key={index}
+              href={link.href} 
+              style={link.active ? {...styles.navLink, ...styles.navLinkActive} : styles.navLink}
+              onMouseEnter={(e) => {
+                if (!link.active) {
+                  e.currentTarget.style.background = '#f3f4f6';
+                  e.currentTarget.style.color = '#2563eb';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!link.active) {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#666';
+                }
+              }}
+            >
+              <span>{link.icon}</span> {link.text}
+            </a>
+          ))}
         </nav>
         <div style={styles.sidebarFooter}>
-          <button onClick={handleLogout} style={styles.logoutBtn}>
+          <button 
+            onClick={handleLogout} 
+            style={styles.logoutBtn}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#dc2626';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.4)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = '#ef4444';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
             🚪 Logout
           </button>
         </div>
@@ -151,7 +186,12 @@ export default function DashboardPage() {
       <div style={styles.mainWrapper}>
         <main style={styles.mainContent}>
           {error && (
-            <div style={styles.errorAlert}>
+            <div style={{
+              ...styles.errorAlert,
+              opacity: mounted ? 1 : 0,
+              transform: mounted ? 'scale(1)' : 'scale(0.95)',
+              transition: 'all 0.5s ease-out',
+            }}>
               <span>⚠️</span>
               <div>
                 <strong>Error:</strong> {error}
@@ -163,7 +203,12 @@ export default function DashboardPage() {
           )}
 
           {/* Welcome Card */}
-          <div style={styles.welcomeCard}>
+          <div style={{
+            ...styles.welcomeCard,
+            opacity: mounted ? 1 : 0,
+            transform: mounted ? 'translateY(0)' : 'translateY(-20px)',
+            transition: 'all 0.8s ease-out 0.2s',
+          }}>
             <h1 style={styles.welcomeTitle}>Selamat Datang, {displayName}! 👋</h1>
             <p style={styles.welcomeText}>
               Kelola reservasi dan pembayaran kost Anda dengan mudah
@@ -172,96 +217,122 @@ export default function DashboardPage() {
 
           {/* Stats Overview */}
           <div style={styles.statsGrid}>
-            <div style={styles.statCard}>
-              <div style={{...styles.statIcon, background: '#dbeafe'}}>📋</div>
-              <div>
-                <p style={styles.statLabel}>Total Reservasi</p>
-                <h3 style={styles.statValue}>{stats.totalReservasi}</h3>
+            {[
+              { icon: '📋', label: 'Total Reservasi', value: stats.totalReservasi, bg: '#dbeafe', delay: '0.4s' },
+              { icon: '✅', label: 'Reservasi Aktif', value: stats.reservasiAktif, bg: '#d1fae5', delay: '0.6s' },
+              { icon: '🏘️', label: 'Kost Tersedia', value: stats.kostTersedia, bg: '#fef3c7', delay: '0.8s' },
+            ].map((stat, index) => (
+              <div 
+                key={index}
+                style={{
+                  ...styles.statCard,
+                  opacity: mounted ? 1 : 0,
+                  transform: mounted ? 'translateY(0)' : 'translateY(20px)',
+                  transition: `all 0.6s ease-out ${stat.delay}`,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-8px)';
+                  e.currentTarget.style.boxShadow = '0 8px 20px rgba(0,0,0,0.15)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                }}
+              >
+                <div style={{...styles.statIcon, background: stat.bg}}>{stat.icon}</div>
+                <div>
+                  <p style={styles.statLabel}>{stat.label}</p>
+                  <h3 style={styles.statValue}>{stat.value}</h3>
+                </div>
               </div>
-            </div>
-
-            <div style={styles.statCard}>
-              <div style={{...styles.statIcon, background: '#d1fae5'}}>✅</div>
-              <div>
-                <p style={styles.statLabel}>Reservasi Aktif</p>
-                <h3 style={styles.statValue}>{stats.reservasiAktif}</h3>
-              </div>
-            </div>
-
-            <div style={styles.statCard}>
-              <div style={{...styles.statIcon, background: '#fef3c7'}}>🏘️</div>
-              <div>
-                <p style={styles.statLabel}>Kost Tersedia</p>
-                <h3 style={styles.statValue}>{stats.kostTersedia}</h3>
-              </div>
-            </div>
+            ))}
           </div>
 
           {/* Quick Actions */}
-          <div style={styles.section}>
+          <div style={{
+            ...styles.section,
+            opacity: mounted ? 1 : 0,
+            transition: 'all 0.8s ease-out 1s',
+          }}>
             <h2 style={styles.sectionTitle}>⚡ Aksi Cepat</h2>
             <div style={styles.actionsGrid}>
-              <a href="/dashboard/reservasi" style={styles.actionCard}>
-                <span style={styles.actionIcon}>📝</span>
-                <h3 style={styles.actionTitle}>Lihat Reservasi</h3>
-                <p style={styles.actionDesc}>Cek status dan detail reservasi Anda</p>
-              </a>
-
-              <a href="/payments" style={styles.actionCard}>
-                <span style={styles.actionIcon}>💰</span>
-                <h3 style={styles.actionTitle}>Bayar Tagihan</h3>
-                <p style={styles.actionDesc}>Lakukan pembayaran kost Anda</p>
-              </a>
-
-              <a href="/dashboard/profile" style={styles.actionCard}>
-                <span style={styles.actionIcon}>⚙️</span>
-                <h3 style={styles.actionTitle}>Pengaturan Profil</h3>
-                <p style={styles.actionDesc}>Update profil dan informasi akun</p>
-              </a>
+              {[
+                { href: '/dashboard/reservasi', icon: '📝', title: 'Lihat Reservasi', desc: 'Cek status dan detail reservasi Anda', delay: '1.2s' },
+                { href: '/payments', icon: '💰', title: 'Bayar Tagihan', desc: 'Lakukan pembayaran kost Anda', delay: '1.4s' },
+                { href: '/dashboard/profile', icon: '⚙️', title: 'Pengaturan Profil', desc: 'Update profil dan informasi akun', delay: '1.6s' },
+              ].map((action, index) => (
+                <a 
+                  key={index}
+                  href={action.href} 
+                  style={{
+                    ...styles.actionCard,
+                    opacity: mounted ? 1 : 0,
+                    transform: mounted ? 'scale(1)' : 'scale(0.95)',
+                    transition: `all 0.6s ease-out ${action.delay}`,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-8px)';
+                    e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,0,0,0.15)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                  }}
+                >
+                  <span style={styles.actionIcon}>{action.icon}</span>
+                  <h3 style={styles.actionTitle}>{action.title}</h3>
+                  <p style={styles.actionDesc}>{action.desc}</p>
+                </a>
+              ))}
             </div>
           </div>
 
           {/* User Info */}
-          <div style={styles.section}>
+          <div style={{
+            ...styles.section,
+            opacity: mounted ? 1 : 0,
+            transform: mounted ? 'translateY(0)' : 'translateY(20px)',
+            transition: 'all 0.8s ease-out 1.8s',
+          }}>
             <h2 style={styles.sectionTitle}>📋 Informasi Akun</h2>
             <div style={styles.infoCard}>
               <div style={styles.infoGrid}>
-                <div style={styles.infoItem}>
-                  <span style={styles.infoLabel}>👤 Nama:</span>
-                  <span style={styles.infoValue}>{displayName}</span>
-                </div>
-                <div style={styles.infoItem}>
-                  <span style={styles.infoLabel}>📱 No. HP:</span>
-                  <span style={styles.infoValue}>{displayPhone}</span>
-                </div>
-                <div style={styles.infoItem}>
-                  <span style={styles.infoLabel}>📍 Alamat:</span>
-                  <span style={styles.infoValue}>{user.alamat}</span>
-                </div>
-                <div style={styles.infoItem}>
-                  <span style={styles.infoLabel}>🏷️ Status:</span>
-                  <span style={{...styles.infoValue, ...styles.statusBadge}}>
-                    {displayRole}
-                  </span>
-                </div>
+                {[
+                  { label: '👤 Nama:', value: displayName },
+                  { label: '📱 No. HP:', value: displayPhone },
+                  { label: '📍 Alamat:', value: user.alamat },
+                  { label: '🏷️ Status:', value: displayRole, isBadge: true },
+                ].map((info, index) => (
+                  <div key={index} style={styles.infoItem}>
+                    <span style={styles.infoLabel}>{info.label}</span>
+                    <span style={info.isBadge ? {...styles.infoValue, ...styles.statusBadge} : styles.infoValue}>
+                      {info.value}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
 
           {/* Tips Section */}
-          <div style={styles.section}>
+          <div style={{
+            ...styles.section,
+            opacity: mounted ? 1 : 0,
+            transform: mounted ? 'scale(1)' : 'scale(0.98)',
+            transition: 'all 0.8s ease-out 2s',
+          }}>
             <h2 style={styles.sectionTitle}>💡 Tips & Informasi</h2>
             <div style={styles.tipsCard}>
               <ul style={styles.tipsList}>
-                <li style={styles.tipItem}>
-                  <strong>Verifikasi Dokumen:</strong> Pastikan dokumen identitas Anda sudah lengkap untuk mempercepat proses reservasi
-                </li>
-                <li style={styles.tipItem}>
-                  <strong>Pembayaran:</strong> Lakukan pembayaran sebelum batas waktu yang ditentukan agar reservasi tidak dibatalkan
-                </li>
-                <li style={styles.tipItem}>
-                  <strong>Komunikasi:</strong> Jangan ragu menghubungi kami jika ada pertanyaan atau kendala
-                </li>
+                {[
+                  { title: 'Verifikasi Dokumen:', text: 'Pastikan dokumen identitas Anda sudah lengkap untuk mempercepat proses reservasi' },
+                  { title: 'Pembayaran:', text: 'Lakukan pembayaran sebelum batas waktu yang ditentukan agar reservasi tidak dibatalkan' },
+                  { title: 'Komunikasi:', text: 'Jangan ragu menghubungi kami jika ada pertanyaan atau kendala' },
+                ].map((tip, index) => (
+                  <li key={index} style={styles.tipItem}>
+                    <strong>{tip.title}</strong> {tip.text}
+                  </li>
+                ))}
               </ul>
             </div>
           </div>
@@ -313,7 +384,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '1rem 1.5rem',
     color: '#666',
     textDecoration: 'none',
-    transition: 'all 0.3s',
+    transition: 'all 0.3s ease',
     borderLeft: '3px solid transparent',
   },
   navLinkActive: {
@@ -336,7 +407,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1rem',
     fontWeight: 600,
     cursor: 'pointer',
-    transition: 'all 0.3s',
+    transition: 'all 0.3s ease',
   },
   mainWrapper: {
     marginLeft: '280px',
@@ -425,7 +496,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     gap: '1rem',
     boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-    transition: 'all 0.3s',
+    transition: 'all 0.3s ease',
+    cursor: 'pointer',
   },
   statIcon: {
     fontSize: '2.5rem',
@@ -458,7 +530,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '12px',
     textDecoration: 'none',
     boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-    transition: 'all 0.3s',
+    transition: 'all 0.3s ease',
     display: 'block',
     cursor: 'pointer',
   },

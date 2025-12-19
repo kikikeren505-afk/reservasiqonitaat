@@ -20,6 +20,7 @@ interface User {
 
 export default function ProfilePage() {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -52,6 +53,7 @@ export default function ProfilePage() {
       });
       
       setLoading(false);
+      setTimeout(() => setMounted(true), 100);
     } catch (error) {
       console.error('Error parsing user data:', error);
       router.push('/login');
@@ -150,7 +152,12 @@ export default function ProfilePage() {
 
   return (
     <div style={styles.container}>
-      <div style={styles.header}>
+      <div style={{
+        ...styles.header,
+        opacity: mounted ? 1 : 0,
+        transform: mounted ? 'translateY(0)' : 'translateY(-20px)',
+        transition: 'all 0.8s ease-out',
+      }}>
         <h1 style={styles.title}>Profil Saya</h1>
         <p style={styles.subtitle}>Kelola informasi profil Anda</p>
       </div>
@@ -161,6 +168,9 @@ export default function ProfilePage() {
           background: message.type === 'success' ? '#d1fae5' : '#fee2e2',
           borderColor: message.type === 'success' ? '#10b981' : '#ef4444',
           color: message.type === 'success' ? '#065f46' : '#991b1b',
+          opacity: 1,
+          transform: 'scale(1)',
+          animation: 'popIn 0.4s ease-out',
         }}>
           <span style={styles.messageIcon}>
             {message.type === 'success' ? '✓' : '⚠️'}
@@ -169,10 +179,19 @@ export default function ProfilePage() {
         </div>
       )}
 
-      <div style={styles.profileCard}>
+      <div style={{
+        ...styles.profileCard,
+        opacity: mounted ? 1 : 0,
+        transform: mounted ? 'translateY(0)' : 'translateY(30px)',
+        transition: 'all 0.8s ease-out 0.2s',
+      }}>
         {/* Avatar Section */}
         <div style={styles.avatarSection}>
-          <div style={styles.avatar}>
+          <div style={{
+            ...styles.avatar,
+            transform: mounted ? 'scale(1) rotate(0deg)' : 'scale(0.8) rotate(-10deg)',
+            transition: 'all 0.6s ease-out 0.4s',
+          }}>
             <span style={styles.avatarText}>
               {displayName.charAt(0).toUpperCase()}
             </span>
@@ -195,6 +214,14 @@ export default function ProfilePage() {
                 onChange={handleChange}
                 style={styles.input}
                 placeholder="Masukkan nama lengkap"
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#2563eb';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
               />
             ) : (
               <p style={styles.value}>{displayName}</p>
@@ -217,6 +244,14 @@ export default function ProfilePage() {
                 onChange={handleChange}
                 style={styles.input}
                 placeholder="Masukkan nomor HP"
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#2563eb';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
               />
             ) : (
               <p style={styles.value}>{displayPhone}</p>
@@ -233,6 +268,14 @@ export default function ProfilePage() {
                 style={styles.textarea}
                 placeholder="Masukkan alamat lengkap"
                 rows={3}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#2563eb';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
               />
             ) : (
               <p style={styles.value}>{user.alamat || '-'}</p>
@@ -248,21 +291,57 @@ export default function ProfilePage() {
                 onClick={handleSave}
                 disabled={saveLoading}
                 style={styles.saveBtn}
+                onMouseEnter={(e) => {
+                  if (!saveLoading) {
+                    e.currentTarget.style.background = '#059669';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.4)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!saveLoading) {
+                    e.currentTarget.style.background = '#10b981';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }
+                }}
               >
-                {saveLoading ? 'Menyimpan...' : 'Simpan Perubahan'}
+                {saveLoading ? '⏳ Menyimpan...' : '💾 Simpan Perubahan'}
               </button>
               <button
                 onClick={handleCancel}
                 disabled={saveLoading}
                 style={styles.cancelBtn}
+                onMouseEnter={(e) => {
+                  if (!saveLoading) {
+                    e.currentTarget.style.background = '#4b5563';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!saveLoading) {
+                    e.currentTarget.style.background = '#6b7280';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }
+                }}
               >
-                Batal
+                ✕ Batal
               </button>
             </>
           ) : (
             <button
               onClick={() => setEditing(true)}
               style={styles.editBtn}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#1d4ed8';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = '#2563eb';
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
             >
               ✏️ Edit Profil
             </button>
@@ -271,7 +350,18 @@ export default function ProfilePage() {
 
         {/* Back to Dashboard */}
         <div style={styles.backLink}>
-          <a href="/dashboard" style={styles.link}>
+          <a 
+            href="/dashboard" 
+            style={styles.link}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = '#1d4ed8';
+              e.currentTarget.style.textDecoration = 'underline';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = '#2563eb';
+              e.currentTarget.style.textDecoration = 'none';
+            }}
+          >
             ← Kembali ke Dashboard
           </a>
         </div>
@@ -409,7 +499,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     border: '2px solid #e5e7eb',
     borderRadius: '10px',
     fontSize: '1rem',
-    transition: 'all 0.3s',
+    transition: 'all 0.3s ease',
+    outline: 'none',
   },
   textarea: {
     width: '100%',
@@ -417,9 +508,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     border: '2px solid #e5e7eb',
     borderRadius: '10px',
     fontSize: '1rem',
-    transition: 'all 0.3s',
+    transition: 'all 0.3s ease',
     resize: 'vertical',
     fontFamily: 'inherit',
+    outline: 'none',
   },
   actionButtons: {
     display: 'flex',
@@ -436,7 +528,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1.1rem',
     fontWeight: 600,
     cursor: 'pointer',
-    transition: 'all 0.3s',
+    transition: 'all 0.3s ease',
   },
   saveBtn: {
     flex: 1,
@@ -448,7 +540,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1.1rem',
     fontWeight: 600,
     cursor: 'pointer',
-    transition: 'all 0.3s',
+    transition: 'all 0.3s ease',
   },
   cancelBtn: {
     flex: 1,
@@ -460,7 +552,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1.1rem',
     fontWeight: 600,
     cursor: 'pointer',
-    transition: 'all 0.3s',
+    transition: 'all 0.3s ease',
   },
   backLink: {
     textAlign: 'center',
@@ -472,5 +564,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     textDecoration: 'none',
     fontSize: '1rem',
     fontWeight: 600,
+    transition: 'all 0.3s ease',
   },
 };

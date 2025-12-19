@@ -24,6 +24,7 @@ interface Tagihan {
 
 export default function PaymentPage() {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [formData, setFormData] = useState<PaymentFormData>({
     metodePembayaran: '',
     namaPengirim: '',
@@ -40,12 +41,17 @@ export default function PaymentPage() {
     fetchTagihan();
   }, []);
 
+  useEffect(() => {
+    if (!loading) {
+      setTimeout(() => setMounted(true), 100);
+    }
+  }, [loading]);
+
   const fetchTagihan = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Ambil data user dari storage
       const userData = sessionStorage.getItem('user') || localStorage.getItem('user');
       if (!userData) {
         router.push('/login');
@@ -55,7 +61,6 @@ export default function PaymentPage() {
       const user = JSON.parse(userData);
       const userId = user.id || user.user_id;
 
-      // Fetch data reservasi aktif user
       const response = await fetch(`/api/reservasi/user/${userId}`, {
         cache: 'no-store',
       });
@@ -67,12 +72,10 @@ export default function PaymentPage() {
       const result = await response.json();
 
       if (result.success && result.data && result.data.length > 0) {
-        // Ambil reservasi pertama yang aktif atau belum lunas
         const activeReservasi = result.data.find((r: any) => 
           r.status_pembayaran === 'pending' || r.status_pembayaran === 'belum_bayar'
         ) || result.data[0];
 
-        // Format data tagihan
         const tagihanData: Tagihan = {
           namaPenyewa: user.nama || user.nama_lengkap || 'User',
           kelasKamar: activeReservasi.nama_kost || activeReservasi.kelas_kamar || '-',
@@ -136,7 +139,6 @@ export default function PaymentPage() {
   };
 
   const handleSubmit = async () => {
-    // Validasi
     if (!formData.metodePembayaran) {
       alert('Pilih metode pembayaran terlebih dahulu!');
       return;
@@ -150,7 +152,6 @@ export default function PaymentPage() {
     }
 
     try {
-      // Prepare form data untuk upload
       const uploadData = new FormData();
       uploadData.append('reservasi_id', String(tagihan?.reservasiId || ''));
       uploadData.append('metode_pembayaran', formData.metodePembayaran);
@@ -230,15 +231,36 @@ export default function PaymentPage() {
 
   return (
     <div style={styles.container}>
-      <div style={styles.header}>
-        <button onClick={() => router.push('/dashboard')} style={styles.backBtn}>
+      <div style={{
+        ...styles.header,
+        opacity: mounted ? 1 : 0,
+        transform: mounted ? 'translateY(0)' : 'translateY(-20px)',
+        transition: 'all 0.8s ease-out',
+      }}>
+        <button 
+          onClick={() => router.push('/dashboard')} 
+          style={styles.backBtn}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#1d4ed8';
+            e.currentTarget.style.transform = 'translateX(-5px)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#2563eb';
+            e.currentTarget.style.transform = 'translateX(0)';
+          }}
+        >
           ← Kembali ke Dashboard
         </button>
       </div>
 
       <div style={styles.contentWrapper}>
         {/* Left Side - Payment Form */}
-        <div style={styles.leftSection}>
+        <div style={{
+          ...styles.leftSection,
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'translateX(0)' : 'translateX(-30px)',
+          transition: 'all 0.8s ease-out 0.2s',
+        }}>
           <div style={styles.card}>
             <h2 style={styles.sectionTitle}>Pilih Metode Pembayaran</h2>
 
@@ -248,6 +270,18 @@ export default function PaymentPage() {
               style={{
                 ...styles.metodeCard,
                 ...(formData.metodePembayaran === 'transfer' ? styles.metodeCardActive : {}),
+              }}
+              onMouseEnter={(e) => {
+                if (formData.metodePembayaran !== 'transfer') {
+                  e.currentTarget.style.borderColor = '#93c5fd';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (formData.metodePembayaran !== 'transfer') {
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }
               }}
             >
               <input
@@ -271,6 +305,18 @@ export default function PaymentPage() {
                 ...styles.metodeCard,
                 ...(formData.metodePembayaran === 'cash' ? styles.metodeCardActive : {}),
               }}
+              onMouseEnter={(e) => {
+                if (formData.metodePembayaran !== 'cash') {
+                  e.currentTarget.style.borderColor = '#93c5fd';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (formData.metodePembayaran !== 'cash') {
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }
+              }}
             >
               <input
                 type="radio"
@@ -289,7 +335,11 @@ export default function PaymentPage() {
 
           {/* Rekening Tujuan - Only show for Transfer */}
           {formData.metodePembayaran === 'transfer' && (
-            <div style={styles.card}>
+            <div style={{
+              ...styles.card,
+              opacity: 1,
+              animation: 'slideDown 0.5s ease-out',
+            }}>
               <h2 style={styles.sectionTitle}>Rekening Tujuan</h2>
               <div style={styles.rekeningBox}>
                 <p style={styles.rekeningLabel}>Bank BNI - No. Rek. 1243567890 - A/n. KOST PONDOK QONITAAT</p>
@@ -308,6 +358,14 @@ export default function PaymentPage() {
                   onChange={handleInputChange}
                   placeholder="Nama sesuai rekening"
                   style={styles.input}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#2563eb';
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = '#d1d5db';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
                 />
               </div>
 
@@ -320,6 +378,14 @@ export default function PaymentPage() {
                   onChange={handleInputChange}
                   placeholder="Nama rekening penerima"
                   style={styles.input}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#2563eb';
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = '#d1d5db';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
                 />
               </div>
 
@@ -331,6 +397,14 @@ export default function PaymentPage() {
                   value={formData.tanggalTransfer}
                   onChange={handleInputChange}
                   style={styles.input}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#2563eb';
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = '#d1d5db';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
                 />
               </div>
 
@@ -348,47 +422,93 @@ export default function PaymentPage() {
               </div>
 
               <div style={styles.buttonGroup}>
-                <button onClick={handleSubmit} style={styles.submitBtn}>
-                  Kirim Bukti
+                <button 
+                  onClick={handleSubmit} 
+                  style={styles.submitBtn}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#ea580c';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(249, 115, 22, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#f97316';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  📤 Kirim Bukti
                 </button>
-                <button onClick={handleReset} style={styles.resetBtn}>
-                  Reset
+                <button 
+                  onClick={handleReset} 
+                  style={styles.resetBtn}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#4b5563';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#6b7280';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  🔄 Reset
                 </button>
               </div>
 
               <p style={styles.helpText}>
-                Ada ada kesalahan, hubungi bendahara: <strong>0812-3456-7890</strong>
+                Ada ada kesalahan, hubungi bendahara: <strong>0838-7851-5387</strong>
               </p>
             </div>
           )}
 
           {/* Cash Info */}
           {formData.metodePembayaran === 'cash' && (
-            <div style={styles.card}>
+            <div style={{
+              ...styles.card,
+              opacity: 1,
+              animation: 'slideDown 0.5s ease-out',
+            }}>
               <h2 style={styles.sectionTitle}>Pembayaran Tunai</h2>
               <div style={styles.cashInfo}>
                 <p style={styles.cashText}>
                   Untuk pembayaran tunai, silakan datang langsung ke kantor kost dan lakukan pembayaran kepada bendahara.
                 </p>
                 <p style={styles.cashText}>
-                  📍 <strong>Alamat:</strong> Jl. Pondok Qonitaat No. 123, Medan
+                  📍 <strong>Alamat:</strong> Jl. Lap. Golf, Kp. Tengah, Medan
                 </p>
                 <p style={styles.cashText}>
                   🕐 <strong>Jam Operasional:</strong> Senin - Jumat, 08:00 - 16:00 WIB
                 </p>
                 <p style={styles.cashText}>
-                  📞 <strong>Kontak:</strong> 0812-3456-7890
+                  📞 <strong>Kontak:</strong> 0838-7851-5387
                 </p>
               </div>
-              <button onClick={handleSubmit} style={styles.submitBtn}>
-                Konfirmasi Pembayaran Tunai
+              <button 
+                onClick={handleSubmit} 
+                style={styles.submitBtn}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#ea580c';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(249, 115, 22, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#f97316';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                ✅ Konfirmasi Pembayaran Tunai
               </button>
             </div>
           )}
         </div>
 
         {/* Right Side - Ringkasan Tagihan */}
-        <div style={styles.rightSection}>
+        <div style={{
+          ...styles.rightSection,
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'translateX(0)' : 'translateX(30px)',
+          transition: 'all 0.8s ease-out 0.4s',
+        }}>
           <div style={styles.card}>
             <h2 style={styles.sectionTitle}>Ringkasan Tagihan</h2>
 
@@ -481,7 +601,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1rem',
     fontWeight: 600,
     cursor: 'pointer',
-    transition: 'all 0.3s',
+    transition: 'all 0.3s ease',
   },
   contentWrapper: {
     display: 'grid',
@@ -521,7 +641,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '12px',
     marginBottom: '1rem',
     cursor: 'pointer',
-    transition: 'all 0.3s',
+    transition: 'all 0.3s ease',
   },
   metodeCardActive: {
     border: '2px solid #2563eb',
@@ -576,6 +696,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '8px',
     fontSize: '1rem',
     boxSizing: 'border-box',
+    transition: 'all 0.3s ease',
+    outline: 'none',
   },
   fileInput: {
     width: '100%',
@@ -607,7 +729,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1rem',
     fontWeight: 600,
     cursor: 'pointer',
-    transition: 'all 0.3s',
+    transition: 'all 0.3s ease',
   },
   resetBtn: {
     flex: 1,
@@ -619,7 +741,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1rem',
     fontWeight: 600,
     cursor: 'pointer',
-    transition: 'all 0.3s',
+    transition: 'all 0.3s ease',
   },
   helpText: {
     fontSize: '0.85rem',

@@ -1,6 +1,7 @@
 // Lokasi: app/api/admin/kost/[id]/route.ts
 
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { query } from '@/lib/db';
 
 // GET - Ambil detail kost by ID
@@ -80,6 +81,12 @@ export async function PUT(
       );
     }
 
+    // Clear cache untuk semua halaman yang menampilkan data kost
+    revalidatePath('/admin/kost');
+    revalidatePath('/admin/kost/' + kostId);
+    revalidatePath('/kost');
+    console.log('✅ Cache cleared for kost pages');
+
     return NextResponse.json(
       {
         success: true,
@@ -139,6 +146,11 @@ export async function DELETE(
         { status: 404 }
       );
     }
+
+    // Clear cache setelah delete
+    revalidatePath('/admin/kost');
+    revalidatePath('/kost');
+    console.log('✅ Cache cleared after delete');
 
     return NextResponse.json(
       {

@@ -123,7 +123,10 @@ export default function EditKostPage({ params }: { params: { id: string } }) {
 
       if (response.ok && data.success) {
         alert('Kost berhasil diupdate!');
-        router.push('/admin/kost');
+        router.refresh();
+        setTimeout(() => {
+          router.push('/admin/kost');
+        }, 100);
       } else {
         setError(data.message || 'Gagal mengupdate kost');
       }

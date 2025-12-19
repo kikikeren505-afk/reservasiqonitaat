@@ -7,52 +7,21 @@ import { useRouter } from 'next/navigation';
 interface Kost {
   id: number;
   nama: string;
-  kelas: string;
+  alamat: string;
+  harga: number;
+  deskripsi: string;
   fasilitas: string;
-  ukuran: string;
-  harga: string;
-  gambar: string;
   status: 'tersedia' | 'penuh';
+  created_at?: string;
 }
-
-const daftarKost: Kost[] = [
-  {
-    id: 1,
-    nama: 'Class 1',
-    kelas: 'Fasilitas',
-    fasilitas: 'Kamar mandi dalam, Ac, Kasur, Lemari, dan Wi-Fi',
-    ukuran: 'Ukuran Kamar 4x4 M',
-    harga: 'Rp 12.000.000 / Tahun',
-    gambar: "/images/kost/class1.jpeg",
-    status: 'tersedia'
-  },
-  {
-    id: 2,
-    nama: 'Class 2',
-    kelas: 'Fasilitas',
-    fasilitas: 'Kamar mandi dalam, Kasur, Lemari, dan Wi-Fi',
-    ukuran: 'Ukuran Kamar 4x4 M',
-    harga: 'Rp 10.000.000 / Tahun',
-    gambar: "/images/kost/class2.jpeg",
-    status: 'tersedia'
-  },
-  {
-    id: 3,
-    nama: 'Class 3',
-    kelas: 'Fasilitas',
-    fasilitas: 'Kamar mandi dalam, Kasur, Lemari, dan Wi-Fi',
-    ukuran: 'Ukuran Kamar 3x5 M',
-    harga: 'Rp 8.000.000 / Tahun',
-    gambar: "/images/kost/class2.jpeg",
-    status: 'tersedia'
-  }
-];
 
 export default function KostPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'semua' | 'tersedia' | 'penuh'>('tersedia');
+  const [daftarKost, setDaftarKost] = useState<Kost[]>([]); // ✅ State untuk data dari API
 
   useEffect(() => {
     // Cek apakah user sudah login
@@ -60,12 +29,43 @@ export default function KostPage() {
     const userFromSessionStorage = sessionStorage.getItem('user');
     
     if (!userFromLocalStorage && !userFromSessionStorage) {
-      // Jika belum login, redirect ke halaman login
       router.push('/login');
     } else {
-      setIsLoading(false);
+      fetchKostData(); // ✅ Fetch data dari API
     }
   }, [router]);
+
+  // ✅ FUNGSI BARU: Fetch data kost dari API
+  const fetchKostData = async () => {
+    try {
+      setIsLoading(true);
+      
+      const response = await fetch('/api/admin/kost', {
+        method: 'GET',
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      });
+
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setDaftarKost(data.data || []);
+      } else {
+        console.error('Failed to fetch kost data:', data.message);
+        setDaftarKost([]);
+      }
+    } catch (error) {
+      console.error('Error fetching kost:', error);
+      setDaftarKost([]);
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setMounted(true), 100);
+    }
+  };
 
   const filteredKost = daftarKost.filter(kost => {
     const matchSearch = kost.nama.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -74,7 +74,36 @@ export default function KostPage() {
     return matchSearch && matchStatus;
   });
 
-  // Tampilkan loading saat mengecek autentikasi
+  // ✅ Helper function untuk format harga
+  const formatHarga = (harga: number) => {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+    }).format(harga);
+  };
+
+  // ✅ Helper function untuk get gambar berdasarkan nama kost
+  const getKostImage = (nama: string) => {
+    if (nama.toLowerCase().includes('class 1') || nama.toLowerCase().includes('kelas 1')) {
+      return '/images/kost/class1.jpeg';
+    } else if (nama.toLowerCase().includes('class 2') || nama.toLowerCase().includes('kelas 2')) {
+      return '/images/kost/class2.jpeg';
+    } else if (nama.toLowerCase().includes('class 3') || nama.toLowerCase().includes('kelas 3')) {
+      return '/images/kost/class2.jpeg';
+    }
+    return '/images/kost/class1.jpeg'; // default
+  };
+
+  // ✅ Helper function untuk ekstrak ukuran kamar dari deskripsi atau nama
+  const getUkuranKamar = (kost: Kost) => {
+    // Coba cari di deskripsi atau nama
+    const text = `${kost.nama} ${kost.deskripsi}`.toLowerCase();
+    if (text.includes('4x4')) return 'Ukuran Kamar 4x4 M';
+    if (text.includes('3x5')) return 'Ukuran Kamar 3x5 M';
+    return 'Ukuran Kamar 4x4 M'; // default
+  };
+
   if (isLoading) {
     return (
       <div style={{
@@ -90,7 +119,16 @@ export default function KostPage() {
           borderRadius: '15px',
           textAlign: 'center'
         }}>
-          <p style={{ fontSize: '1.2rem', color: '#666' }}>Memeriksa autentikasi...</p>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            border: '4px solid #e5e7eb',
+            borderTop: '4px solid #f97316',
+            borderRadius: '50%',
+            margin: '0 auto 1rem',
+            animation: 'spin 1s linear infinite',
+          }}></div>
+          <p style={{ fontSize: '1.2rem', color: '#666' }}>Memuat data kost...</p>
         </div>
       </div>
     );
@@ -98,21 +136,53 @@ export default function KostPage() {
 
   return (
     <div style={styles.container}>
-      <div style={styles.header}>
+      <div style={{
+        ...styles.header,
+        opacity: mounted ? 1 : 0,
+        transform: mounted ? 'translateY(0)' : 'translateY(-30px)',
+        transition: 'all 0.8s ease-out',
+      }}>
         <h1 style={styles.title}>Daftar Kost Pondok Qonitaat</h1>
         <p style={styles.subtitle}>Temukan kost impian Anda di Medan</p>
       </div>
 
-      <div style={styles.searchSection}>
+      <div style={{
+        ...styles.searchSection,
+        opacity: mounted ? 1 : 0,
+        transform: mounted ? 'translateY(0)' : 'translateY(30px)',
+        transition: 'all 0.8s ease-out 0.2s',
+      }}>
         <div style={styles.searchWrapper}>
           <input
             type="text"
-            placeholder="Cari nama kost atau lokasi..."
+            placeholder="Cari tipe kamar..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={styles.searchInput}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = '#2563eb';
+              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = '#e5e7eb';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
           />
-          <button style={styles.searchButton}>🔍 Cari</button>
+          <button 
+            style={styles.searchButton}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#1d4ed8';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.4)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = '#2563eb';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            🔍 Cari
+          </button>
         </div>
         
         <div style={styles.filterWrapper}>
@@ -121,6 +191,12 @@ export default function KostPage() {
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as any)}
             style={styles.filterSelect}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = '#2563eb';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = '#e5e7eb';
+            }}
           >
             <option value="semua">Semua</option>
             <option value="tersedia">Tersedia</option>
@@ -130,16 +206,37 @@ export default function KostPage() {
       </div>
 
       {filteredKost.length === 0 ? (
-        <div style={styles.emptyState}>
+        <div style={{
+          ...styles.emptyState,
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'scale(1)' : 'scale(0.9)',
+          transition: 'all 0.6s ease-out 0.4s',
+        }}>
           <p style={styles.emptyText}>Tidak ada kost yang ditemukan</p>
         </div>
       ) : (
         <div style={styles.kostGrid}>
-          {filteredKost.map((kost) => (
-            <div key={kost.id} style={styles.kostCard}>
+          {filteredKost.map((kost, index) => (
+            <div 
+              key={kost.id} 
+              style={{
+                ...styles.kostCard,
+                opacity: mounted ? 1 : 0,
+                transform: mounted ? 'translateY(0)' : 'translateY(30px)',
+                transition: `all 0.6s ease-out ${0.3 + index * 0.1}s`,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-10px) scale(1.02)';
+                e.currentTarget.style.boxShadow = '0 20px 40px rgba(0,0,0,0.25)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                e.currentTarget.style.boxShadow = '0 10px 25px rgba(0,0,0,0.15)';
+              }}
+            >
               <div style={styles.imageWrapper}>
                 <img 
-                  src={kost.gambar} 
+                  src={getKostImage(kost.nama)} 
                   alt={kost.nama}
                   style={styles.kostImage}
                 />
@@ -153,10 +250,10 @@ export default function KostPage() {
               
               <div style={styles.kostContent}>
                 <h3 style={styles.kostNama}>{kost.nama}</h3>
-                <p style={styles.kostKelas}>{kost.kelas}</p>
+                <p style={styles.kostKelas}>Fasilitas</p>
                 <p style={styles.kostFasilitas}>{kost.fasilitas}</p>
-                <p style={styles.kostUkuran}>{kost.ukuran}</p>
-                <p style={styles.kostHarga}>{kost.harga}</p>
+                <p style={styles.kostUkuran}>{getUkuranKamar(kost)}</p>
+                <p style={styles.kostHarga}>{formatHarga(kost.harga)} / Tahun</p>
                 
                 <Link 
                   href={`/reservasi?kost_id=${kost.id}`}
@@ -167,6 +264,20 @@ export default function KostPage() {
                   }}
                   onClick={(e) => {
                     if (kost.status === 'penuh') e.preventDefault();
+                  }}
+                  onMouseEnter={(e) => {
+                    if (kost.status === 'tersedia') {
+                      e.currentTarget.style.background = '#9a3412';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(194, 65, 12, 0.4)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (kost.status === 'tersedia') {
+                      e.currentTarget.style.background = '#c2410c';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }
                   }}
                 >
                   {kost.status === 'tersedia' ? 'Booking' : 'Tidak Tersedia'}
@@ -219,6 +330,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     border: '2px solid #e5e7eb',
     borderRadius: '10px',
     fontSize: '1rem',
+    transition: 'all 0.3s ease',
+    outline: 'none',
   },
   searchButton: {
     padding: '0.875rem 2rem',
@@ -229,6 +342,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1rem',
     fontWeight: 600,
     cursor: 'pointer',
+    transition: 'all 0.3s ease',
   },
   filterWrapper: {
     display: 'flex',
@@ -245,6 +359,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '8px',
     fontSize: '0.95rem',
     cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    outline: 'none',
   },
   kostGrid: {
     maxWidth: '1200px',
@@ -258,7 +374,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '15px',
     overflow: 'hidden',
     boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
-    transition: 'transform 0.3s, box-shadow 0.3s',
+    transition: 'all 0.4s ease',
     cursor: 'pointer',
   },
   imageWrapper: {
@@ -270,6 +386,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '100%',
     height: '100%',
     objectFit: 'cover',
+    transition: 'transform 0.4s ease',
   },
   statusBadge: {
     position: 'absolute',
@@ -323,7 +440,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '10px',
     fontSize: '1.1rem',
     fontWeight: 'bold',
-    transition: 'background 0.3s',
+    transition: 'all 0.3s ease',
   },
   emptyState: {
     maxWidth: '1200px',

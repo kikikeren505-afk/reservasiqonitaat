@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import NotificationCard from '../components/NotificationCard';
 
 interface AdminStats {
   totalUsers: number;
@@ -39,7 +40,6 @@ export default function AdminDashboard() {
     try {
       const parsedUser = JSON.parse(userData);
       
-      // Check if user is admin
       if (parsedUser.role !== 'admin') {
         alert('Akses ditolak. Halaman ini hanya untuk admin.');
         router.push('/dashboard');
@@ -119,6 +119,9 @@ export default function AdminDashboard() {
             </a>
             <a href="/admin/users" style={styles.navLink}>
               👥 Kelola User
+            </a>
+            <a href="/admin/payments" style={styles.navLink}>
+              💰 Pembayaran
             </a>
             <button onClick={handleLogout} style={styles.logoutBtn}>
               🚪 Logout
@@ -218,10 +221,16 @@ export default function AdminDashboard() {
                 <h3 style={styles.actionTitle}>Kelola Kost</h3>
                 <p style={styles.actionDesc}>Edit atau hapus data kost</p>
               </a>
+
+              <a href="/admin/payments" style={styles.actionCard}>
+                <span style={styles.actionIcon}>💰</span>
+                <h3 style={styles.actionTitle}>Kelola Pembayaran</h3>
+                <p style={styles.actionDesc}>Konfirmasi pembayaran masuk</p>
+              </a>
             </div>
           </div>
 
-          {/* Info Cards */}
+          {/* Info Cards - GANTI DENGAN NOTIFIKASI DINAMIS */}
           <div style={styles.infoCardsGrid}>
             <div style={styles.infoCard}>
               <h3 style={styles.infoCardTitle}>📊 Statistik Hari Ini</h3>
@@ -230,14 +239,8 @@ export default function AdminDashboard() {
               </p>
             </div>
 
-            <div style={styles.infoCard}>
-              <h3 style={styles.infoCardTitle}>🔔 Notifikasi</h3>
-              <p style={styles.infoCardText}>
-                {stats.reservasiPending > 0 
-                  ? `Ada ${stats.reservasiPending} reservasi menunggu konfirmasi Anda.`
-                  : 'Tidak ada reservasi yang perlu dikonfirmasi.'}
-              </p>
-            </div>
+            {/* NOTIFIKASI COMPONENT - DINAMIS */}
+            <NotificationCard />
           </div>
         </main>
       </div>

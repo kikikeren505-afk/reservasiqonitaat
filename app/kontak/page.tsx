@@ -2,9 +2,10 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function KontakPage() {
+  const [mounted, setMounted] = useState(false);
   const [formData, setFormData] = useState({
     nama: '',
     email: '',
@@ -12,6 +13,10 @@ export default function KontakPage() {
     pesan: ''
   });
   const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Link Google Maps yang akurat
   const googleMapsLink = "https://maps.app.goo.gl/4XubE8Xa94614m1V8";
@@ -36,7 +41,12 @@ export default function KontakPage() {
 
   return (
     <div style={styles.container}>
-      <div style={styles.hero}>
+      <div style={{
+        ...styles.hero,
+        opacity: mounted ? 1 : 0,
+        transform: mounted ? 'translateY(0)' : 'translateY(-30px)',
+        transition: 'all 1s ease-out',
+      }}>
         <h1 style={styles.heroTitle}>Hubungi Kami</h1>
         <p style={styles.heroSubtitle}>
           Punya pertanyaan? Kami siap membantu Anda!
@@ -45,77 +55,137 @@ export default function KontakPage() {
 
       <div style={styles.content}>
         <div style={styles.grid}>
-          <div style={styles.infoSection}>
+          <div style={{
+            ...styles.infoSection,
+            opacity: mounted ? 1 : 0,
+            transform: mounted ? 'translateX(0)' : 'translateX(-30px)',
+            transition: 'all 0.8s ease-out 0.3s',
+          }}>
             <h2 style={styles.infoTitle}>Informasi Kontak</h2>
             
-            <div style={styles.contactCard}>
-              <div style={styles.contactIcon}>📍</div>
-              <div>
-                <h3 style={styles.contactLabel}>Alamat</h3>
-                <p style={styles.contactText}>
-                  Jl. Lap. Golf, Kp. Tengah<br />
-                  Kec. Pancur Batu<br />
-                  Kabupaten Deli Serdang<br />
-                  Sumatera Utara, Indonesia
-                </p>
+            {[
+              {
+                icon: '📍',
+                label: 'Alamat',
+                text: (
+                  <>
+                    Jl. Lap. Golf, Kp. Tengah<br />
+                    Kec. Pancur Batu<br />
+                    Kabupaten Deli Serdang<br />
+                    Sumatera Utara, Indonesia
+                  </>
+                ),
+                delay: '0.5s'
+              },
+              {
+                icon: '📞',
+                label: 'Telepon',
+                text: (
+                  <>
+                    +62 838-7851-5387<br />
+                    WhatsApp: 0838-7851-5387
+                  </>
+                ),
+                delay: '0.7s'
+              },
+              {
+                icon: '✉️',
+                label: 'Email',
+                text: (
+                  <>
+                    info@kostqonitaat.com<br />
+                    admin@kostqonitaat.com
+                  </>
+                ),
+                delay: '0.9s'
+              },
+              {
+                icon: '🕐',
+                label: 'Jam Operasional',
+                text: (
+                  <>
+                    Senin - Jumat: 08.00 - 20.00 WIB<br />
+                    Sabtu - Minggu: 09.00 - 17.00 WIB
+                  </>
+                ),
+                delay: '1.1s'
+              }
+            ].map((contact, index) => (
+              <div 
+                key={index}
+                style={{
+                  ...styles.contactCard,
+                  opacity: mounted ? 1 : 0,
+                  transform: mounted ? 'translateY(0)' : 'translateY(20px)',
+                  transition: `all 0.6s ease-out ${contact.delay}`,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-5px)';
+                  e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
+                }}
+              >
+                <div style={styles.contactIcon}>{contact.icon}</div>
+                <div>
+                  <h3 style={styles.contactLabel}>{contact.label}</h3>
+                  <p style={styles.contactText}>{contact.text}</p>
+                </div>
               </div>
-            </div>
+            ))}
 
-            <div style={styles.contactCard}>
-              <div style={styles.contactIcon}>📞</div>
-              <div>
-                <h3 style={styles.contactLabel}>Telepon</h3>
-                <p style={styles.contactText}>
-                  +62 838-7851-5387<br />
-                  WhatsApp: 0838-7851-5387
-                </p>
-              </div>
-            </div>
-
-            <div style={styles.contactCard}>
-              <div style={styles.contactIcon}>✉️</div>
-              <div>
-                <h3 style={styles.contactLabel}>Email</h3>
-                <p style={styles.contactText}>
-                  info@kostqonitaat.com<br />
-                  admin@kostqonitaat.com
-                </p>
-              </div>
-            </div>
-
-            <div style={styles.contactCard}>
-              <div style={styles.contactIcon}>🕐</div>
-              <div>
-                <h3 style={styles.contactLabel}>Jam Operasional</h3>
-                <p style={styles.contactText}>
-                  Senin - Jumat: 08.00 - 20.00 WIB<br />
-                  Sabtu - Minggu: 09.00 - 17.00 WIB
-                </p>
-              </div>
-            </div>
-
-            <div style={styles.socialSection}>
+            <div style={{
+              ...styles.socialSection,
+              opacity: mounted ? 1 : 0,
+              transform: mounted ? 'scale(1)' : 'scale(0.95)',
+              transition: 'all 0.6s ease-out 1.3s',
+            }}>
               <h3 style={styles.socialTitle}>Ikuti Kami</h3>
               <div style={styles.socialLinks}>
-                <a href="#" style={styles.socialButton}>📘 Facebook</a>
-                <a href="#" style={styles.socialButton}>📷 Instagram</a>
-                <a 
-                  href="https://api.whatsapp.com/send?phone=6283878515387&text=Halo,%20saya%20tertarik%20dengan%20Kost%20Pondok%20Qonitaat" 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  style={styles.socialButton}
-                >
-                  💬 WhatsApp
-                </a>
+                {[
+                  { icon: '📘', text: 'Facebook', href: '#' },
+                  { icon: '📷', text: 'Instagram', href: '#' },
+                  { icon: '💬', text: 'WhatsApp', href: 'https://api.whatsapp.com/send?phone=6283878515387&text=Halo,%20saya%20tertarik%20dengan%20Kost%20Pondok%20Qonitaat' }
+                ].map((social, index) => (
+                  <a 
+                    key={index}
+                    href={social.href}
+                    target={social.icon === '💬' ? '_blank' : undefined}
+                    rel={social.icon === '💬' ? 'noopener noreferrer' : undefined}
+                    style={styles.socialButton}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#667eea';
+                      e.currentTarget.style.color = 'white';
+                      e.currentTarget.style.transform = 'translateX(5px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#f1f5f9';
+                      e.currentTarget.style.color = '#334155';
+                      e.currentTarget.style.transform = 'translateX(0)';
+                    }}
+                  >
+                    {social.icon} {social.text}
+                  </a>
+                ))}
               </div>
             </div>
           </div>
 
-          <div style={styles.formSection}>
+          <div style={{
+            ...styles.formSection,
+            opacity: mounted ? 1 : 0,
+            transform: mounted ? 'translateX(0)' : 'translateX(30px)',
+            transition: 'all 0.8s ease-out 0.3s',
+          }}>
             <h2 style={styles.formTitle}>Kirim Pesan</h2>
             
             {submitted && (
-              <div style={styles.successMessage}>
+              <div style={{
+                ...styles.successMessage,
+                animation: 'fadeIn 0.5s ease-out',
+              }}>
                 ✓ Pesan berhasil dikirim! Kami akan segera menghubungi Anda.
               </div>
             )}
@@ -131,6 +201,14 @@ export default function KontakPage() {
                   required
                   style={styles.input}
                   placeholder="Masukkan nama lengkap Anda"
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#667eea';
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
                 />
               </div>
 
@@ -144,6 +222,14 @@ export default function KontakPage() {
                   required
                   style={styles.input}
                   placeholder="nama@email.com"
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#667eea';
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
                 />
               </div>
 
@@ -157,6 +243,14 @@ export default function KontakPage() {
                   required
                   style={styles.input}
                   placeholder="08xx-xxxx-xxxx"
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#667eea';
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
                 />
               </div>
 
@@ -170,10 +264,29 @@ export default function KontakPage() {
                   rows={6}
                   style={styles.textarea}
                   placeholder="Tuliskan pertanyaan atau pesan Anda di sini..."
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = '#667eea';
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
                 />
               </div>
 
-              <button type="submit" style={styles.submitButton}>
+              <button 
+                type="submit" 
+                style={styles.submitButton}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-3px)';
+                  e.currentTarget.style.boxShadow = '0 8px 20px rgba(102, 126, 234, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
                 📤 Kirim Pesan
               </button>
             </form>
@@ -181,7 +294,12 @@ export default function KontakPage() {
         </div>
 
         {/* SECTION GOOGLE MAPS - UPGRADED */}
-        <div style={styles.mapSection}>
+        <div style={{
+          ...styles.mapSection,
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'translateY(0)' : 'translateY(30px)',
+          transition: 'all 0.8s ease-out 1.5s',
+        }}>
           <h2 style={styles.mapTitle}>📍 Lokasi Kami</h2>
           
           <div style={styles.mapContainer}>
@@ -207,6 +325,14 @@ export default function KontakPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     style={styles.mapButtonPrimary}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)';
+                      e.currentTarget.style.boxShadow = '0 8px 20px rgba(102, 126, 234, 0.4)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
                   >
                     🧭 Buka di Google Maps
                   </a>
@@ -215,6 +341,16 @@ export default function KontakPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     style={styles.mapButtonSecondary}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                      e.currentTarget.style.color = 'white';
+                      e.currentTarget.style.transform = 'translateY(-3px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'white';
+                      e.currentTarget.style.color = '#667eea';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
                   >
                     🚗 Dapatkan Petunjuk Arah
                   </a>
@@ -295,6 +431,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     background: 'white',
     borderRadius: '12px',
     boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+    transition: 'all 0.3s ease',
+    cursor: 'pointer',
   },
   contactIcon: {
     fontSize: '2.5rem',
@@ -336,7 +474,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     textAlign: 'center',
     fontSize: '0.95rem',
     fontWeight: 600,
-    transition: 'background 0.3s',
+    transition: 'all 0.3s ease',
+    cursor: 'pointer',
   },
   formSection: {
     background: 'white',
@@ -379,7 +518,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     border: '2px solid #e2e8f0',
     borderRadius: '8px',
     fontSize: '1rem',
-    transition: 'border-color 0.3s',
+    transition: 'all 0.3s ease',
+    outline: 'none',
   },
   textarea: {
     padding: '0.875rem',
@@ -388,6 +528,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1rem',
     resize: 'vertical',
     fontFamily: 'inherit',
+    transition: 'all 0.3s ease',
+    outline: 'none',
   },
   submitButton: {
     padding: '1rem',
@@ -398,7 +540,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1.1rem',
     fontWeight: 'bold',
     cursor: 'pointer',
-    transition: 'transform 0.3s',
+    transition: 'all 0.3s ease',
   },
   
   // STYLES UNTUK GOOGLE MAPS - BARU
@@ -464,7 +606,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '50px',
     fontSize: '1rem',
     fontWeight: 'bold',
-    transition: 'transform 0.3s, box-shadow 0.3s',
+    transition: 'all 0.3s ease',
     cursor: 'pointer',
   },
   mapButtonSecondary: {
@@ -477,7 +619,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1rem',
     fontWeight: 'bold',
     border: '2px solid #667eea',
-    transition: 'all 0.3s',
+    transition: 'all 0.3s ease',
     cursor: 'pointer',
   },
   mapHint: {

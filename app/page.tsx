@@ -1,9 +1,24 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+
 export default function HomePage() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   return (
     <div style={styles.container}>
       {/* Hero Section */}
       <section style={styles.heroSection}>
-        <div style={styles.heroContent}>
+        <div style={{
+          ...styles.heroContent,
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'translateY(0)' : 'translateY(30px)',
+          transition: 'all 1s ease-out',
+        }}>
           <h1 style={styles.heroTitle}>
             Selamat Datang di Kost Pondok Qonitaat
           </h1>
@@ -11,10 +26,34 @@ export default function HomePage() {
             Hunian nyaman dan aman di Medan dengan fasilitas lengkap untuk kenyamanan Anda
           </p>
           <div style={styles.heroButtons}>
-            <a href="/login" style={styles.btnPrimary}>
+            <a 
+              href="/login" 
+              style={styles.btnPrimary}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-3px) scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)';
+              }}
+            >
               Login untuk Booking
             </a>
-            <a href="/register" style={styles.btnSecondary}>
+            <a 
+              href="/register" 
+              style={styles.btnSecondary}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-3px) scale(1.05)';
+                e.currentTarget.style.background = 'white';
+                e.currentTarget.style.color = '#667eea';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = 'white';
+              }}
+            >
               Daftar Sekarang
             </a>
           </div>
@@ -23,50 +62,90 @@ export default function HomePage() {
 
       {/* Features Section */}
       <section style={styles.featuresSection}>
-        <h2 style={styles.sectionTitle}>Kenapa Memilih Kami?</h2>
+        <h2 style={{
+          ...styles.sectionTitle,
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'translateY(0)' : 'translateY(30px)',
+          transition: 'all 1s ease-out 0.3s',
+        }}>
+          Kenapa Memilih Kami?
+        </h2>
         <div style={styles.featuresGrid}>
-          <div style={styles.featureCard}>
-            <div style={styles.featureIcon}>🏠</div>
-            <h3 style={styles.featureTitle}>Lokasi Strategis</h3>
-            <p style={styles.featureText}>
-              Terletak di pusat kota Medan dengan akses mudah ke berbagai fasilitas umum
-            </p>
-          </div>
-          
-          <div style={styles.featureCard}>
-            <div style={styles.featureIcon}>🔒</div>
-            <h3 style={styles.featureTitle}>Aman & Nyaman</h3>
-            <p style={styles.featureText}>
-              Sistem keamanan 24 jam dengan CCTV dan penjaga yang siap membantu
-            </p>
-          </div>
-          
-          <div style={styles.featureCard}>
-            <div style={styles.featureIcon}>✨</div>
-            <h3 style={styles.featureTitle}>Fasilitas Lengkap</h3>
-            <p style={styles.featureText}>
-              Kamar mandi dalam, AC, Wi-Fi, kasur, lemari, dan fasilitas lainnya
-            </p>
-          </div>
-          
-          <div style={styles.featureCard}>
-            <div style={styles.featureIcon}>💰</div>
-            <h3 style={styles.featureTitle}>Harga Terjangkau</h3>
-            <p style={styles.featureText}>
-              Berbagai pilihan kelas kost dengan harga yang sesuai budget Anda
-            </p>
-          </div>
+          {[
+            {
+              icon: '🏠',
+              title: 'Lokasi Strategis',
+              text: 'Terletak di pusat kota Medan dengan akses mudah ke berbagai fasilitas umum',
+              delay: '0.4s'
+            },
+            {
+              icon: '🔒',
+              title: 'Aman & Nyaman',
+              text: 'Sistem keamanan 24 jam dengan CCTV dan penjaga yang siap membantu',
+              delay: '0.6s'
+            },
+            {
+              icon: '✨',
+              title: 'Fasilitas Lengkap',
+              text: 'Kamar mandi dalam, AC, Wi-Fi, kasur, lemari, dan fasilitas lainnya',
+              delay: '0.8s'
+            },
+            {
+              icon: '💰',
+              title: 'Harga Terjangkau',
+              text: 'Berbagai pilihan kelas kost dengan harga yang sesuai budget Anda',
+              delay: '1s'
+            }
+          ].map((feature, index) => (
+            <div 
+              key={index}
+              style={{
+                ...styles.featureCard,
+                opacity: mounted ? 1 : 0,
+                transform: mounted ? 'translateY(0)' : 'translateY(30px)',
+                transition: `all 1s ease-out ${feature.delay}`,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-10px)';
+                e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.15)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,0,0,0.1)';
+              }}
+            >
+              <div style={styles.featureIcon}>{feature.icon}</div>
+              <h3 style={styles.featureTitle}>{feature.title}</h3>
+              <p style={styles.featureText}>{feature.text}</p>
+            </div>
+          ))}
         </div>
       </section>
 
       {/* CTA Section */}
       <section style={styles.ctaSection}>
-        <div style={styles.ctaContent}>
+        <div style={{
+          ...styles.ctaContent,
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'scale(1)' : 'scale(0.95)',
+          transition: 'all 1s ease-out 1.2s',
+        }}>
           <h2 style={styles.ctaTitle}>Siap Menemukan Kost Impian Anda?</h2>
           <p style={styles.ctaText}>
             Login sekarang untuk melihat daftar kost yang tersedia dan lakukan booking
           </p>
-          <a href="/login" style={styles.ctaButton}>
+          <a 
+            href="/login" 
+            style={styles.ctaButton}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-5px) scale(1.05)';
+              e.currentTarget.style.boxShadow = '0 8px 30px rgba(0,0,0,0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0) scale(1)';
+              e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.2)';
+            }}
+          >
             Login Sekarang
           </a>
         </div>
@@ -75,20 +154,30 @@ export default function HomePage() {
       {/* Info Section */}
       <section style={styles.infoSection}>
         <div style={styles.infoGrid}>
-          <div style={styles.infoCard}>
-            <h3 style={styles.infoTitle}>📍 Lokasi</h3>
-            <p style={styles.infoText}>Medan, Sumatera Utara</p>
-          </div>
-          
-          <div style={styles.infoCard}>
-            <h3 style={styles.infoTitle}>📞 Kontak</h3>
-            <p style={styles.infoText}>+62 xxx xxxx xxxx</p>
-          </div>
-          
-          <div style={styles.infoCard}>
-            <h3 style={styles.infoTitle}>✉️ Email</h3>
-            <p style={styles.infoText}>info@pondokqonitaat.com</p>
-          </div>
+          {[
+            { icon: '📍', title: 'Lokasi', text: 'Medan, Sumatera Utara', delay: '1.4s' },
+            { icon: '📞', title: 'Kontak', text: '0838-7851-5387', delay: '1.6s' },
+            { icon: '✉️', title: 'Email', text: 'info@pondokqonitaat.com', delay: '1.8s' }
+          ].map((info, index) => (
+            <div 
+              key={index}
+              style={{
+                ...styles.infoCard,
+                opacity: mounted ? 1 : 0,
+                transform: mounted ? 'translateY(0)' : 'translateY(20px)',
+                transition: `all 1s ease-out ${info.delay}`,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-5px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <h3 style={styles.infoTitle}>{info.icon} {info.title}</h3>
+              <p style={styles.infoText}>{info.text}</p>
+            </div>
+          ))}
         </div>
       </section>
     </div>
@@ -137,8 +226,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '12px',
     fontSize: '1.1rem',
     fontWeight: 'bold',
-    transition: 'all 0.3s',
+    transition: 'all 0.3s ease',
     boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+    cursor: 'pointer',
   },
   btnSecondary: {
     padding: '1rem 2.5rem',
@@ -149,7 +239,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1.1rem',
     fontWeight: 'bold',
     border: '2px solid white',
-    transition: 'all 0.3s',
+    transition: 'all 0.3s ease',
+    cursor: 'pointer',
   },
   
   // Features Section
@@ -177,7 +268,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '15px',
     textAlign: 'center',
     boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
-    transition: 'transform 0.3s',
+    transition: 'all 0.3s ease',
+    cursor: 'pointer',
   },
   featureIcon: {
     fontSize: '3rem',
@@ -227,7 +319,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1.2rem',
     fontWeight: 'bold',
     boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
-    transition: 'all 0.3s',
+    transition: 'all 0.3s ease',
+    cursor: 'pointer',
   },
   
   // Info Section
@@ -245,6 +338,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   infoCard: {
     textAlign: 'center',
     padding: '1.5rem',
+    transition: 'all 0.3s ease',
+    cursor: 'pointer',
   },
   infoTitle: {
     fontSize: '1.5rem',

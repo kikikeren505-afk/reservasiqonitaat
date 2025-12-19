@@ -1,6 +1,14 @@
-    'use client';
+'use client';
+
+import { useState, useEffect } from 'react';
 
 export default function FiturPage() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const fiturList = [
     {
       icon: '🛏️',
@@ -38,16 +46,6 @@ export default function FiturPage() {
       description: 'Dapur dengan peralatan lengkap yang bisa digunakan bersama'
     },
     {
-      icon: '🧺',
-      title: 'Laundry',
-      description: 'Layanan laundry dengan harga terjangkau untuk kemudahan Anda'
-    },
-    {
-      icon: '📺',
-      title: 'Ruang Bersama',
-      description: 'Area berkumpul dengan TV dan tempat duduk yang nyaman'
-    },
-    {
       icon: '🏪',
       title: 'Dekat Fasilitas Umum',
       description: 'Lokasi strategis dekat minimarket, rumah sakit, dan kampus'
@@ -56,11 +54,6 @@ export default function FiturPage() {
       icon: '💡',
       title: 'Listrik & Air',
       description: 'Listrik dan air sudah termasuk dalam harga sewa bulanan'
-    },
-    {
-      icon: '🧹',
-      title: 'Cleaning Service',
-      description: 'Layanan kebersihan area umum setiap hari'
     }
   ];
 
@@ -76,7 +69,12 @@ export default function FiturPage() {
 
   return (
     <div style={styles.container}>
-      <div style={styles.hero}>
+      <div style={{
+        ...styles.hero,
+        opacity: mounted ? 1 : 0,
+        transform: mounted ? 'translateY(0)' : 'translateY(-30px)',
+        transition: 'all 1s ease-out',
+      }}>
         <h1 style={styles.heroTitle}>Fasilitas & Fitur Unggulan</h1>
         <p style={styles.heroSubtitle}>
           Kost Pondok Qonitaat menyediakan berbagai fasilitas modern untuk kenyamanan hunian Anda
@@ -85,10 +83,33 @@ export default function FiturPage() {
 
       <div style={styles.content}>
         <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>Fasilitas Utama</h2>
+          <h2 style={{
+            ...styles.sectionTitle,
+            opacity: mounted ? 1 : 0,
+            transform: mounted ? 'translateY(0)' : 'translateY(20px)',
+            transition: 'all 0.8s ease-out 0.3s',
+          }}>
+            Fasilitas Utama
+          </h2>
           <div style={styles.fiturGrid}>
             {fiturList.map((fitur, index) => (
-              <div key={index} style={styles.fiturCard}>
+              <div 
+                key={index} 
+                style={{
+                  ...styles.fiturCard,
+                  opacity: mounted ? 1 : 0,
+                  transform: mounted ? 'translateY(0)' : 'translateY(30px)',
+                  transition: `all 0.6s ease-out ${0.4 + index * 0.1}s`,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-10px) scale(1.03)';
+                  e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,0,0,0.15)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                  e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.07)';
+                }}
+              >
                 <div style={styles.iconWrapper}>
                   <span style={styles.icon}>{fitur.icon}</span>
                 </div>
@@ -100,11 +121,31 @@ export default function FiturPage() {
         </section>
 
         <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>Perlengkapan Kamar</h2>
-          <div style={styles.fasilitasBox}>
+          <h2 style={{
+            ...styles.sectionTitle,
+            opacity: mounted ? 1 : 0,
+            transform: mounted ? 'translateY(0)' : 'translateY(20px)',
+            transition: 'all 0.8s ease-out 1.5s',
+          }}>
+            Perlengkapan Kamar
+          </h2>
+          <div style={{
+            ...styles.fasilitasBox,
+            opacity: mounted ? 1 : 0,
+            transform: mounted ? 'scale(1)' : 'scale(0.95)',
+            transition: 'all 0.8s ease-out 1.7s',
+          }}>
             <div style={styles.fasilitasList}>
               {fasilitasTambahan.map((item, index) => (
-                <div key={index} style={styles.fasilitasItem}>
+                <div 
+                  key={index} 
+                  style={{
+                    ...styles.fasilitasItem,
+                    opacity: mounted ? 1 : 0,
+                    transform: mounted ? 'translateX(0)' : 'translateX(-20px)',
+                    transition: `all 0.5s ease-out ${1.8 + index * 0.1}s`,
+                  }}
+                >
                   <span style={styles.checkIcon}>✓</span>
                   <span>{item}</span>
                 </div>
@@ -113,16 +154,45 @@ export default function FiturPage() {
           </div>
         </section>
 
-        <section style={styles.ctaSection}>
+        <section style={{
+          ...styles.ctaSection,
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'scale(1)' : 'scale(0.95)',
+          transition: 'all 0.8s ease-out 2.5s',
+        }}>
           <h2 style={styles.ctaTitle}>Tertarik dengan Fasilitasnya?</h2>
           <p style={styles.ctaText}>
             Segera reservasi kamar impian Anda dan nikmati semua fasilitas yang kami sediakan
           </p>
           <div style={styles.ctaButtons}>
-            <a href="/kost" style={styles.btnPrimary}>
+            <a 
+              href="/kost" 
+              style={styles.btnPrimary}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-3px) scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 8px 16px rgba(249, 115, 22, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
               Lihat Daftar Kost
             </a>
-            <a href="/kontak" style={styles.btnSecondary}>
+            <a 
+              href="/kontak" 
+              style={styles.btnSecondary}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-3px) scale(1.05)';
+                e.currentTarget.style.background = 'white';
+                e.currentTarget.style.color = '#f97316';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = 'white';
+              }}
+            >
               Hubungi Kami
             </a>
           </div>
@@ -180,7 +250,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '15px',
     textAlign: 'center',
     boxShadow: '0 4px 6px rgba(0,0,0,0.07)',
-    transition: 'transform 0.3s, box-shadow 0.3s',
+    transition: 'all 0.4s ease',
     cursor: 'pointer',
   },
   iconWrapper: {
@@ -254,7 +324,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '10px',
     fontSize: '1.1rem',
     fontWeight: 'bold',
-    transition: 'transform 0.3s',
+    transition: 'all 0.3s ease',
+    cursor: 'pointer',
   },
   btnSecondary: {
     padding: '1rem 2.5rem',
@@ -265,6 +336,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '10px',
     fontSize: '1.1rem',
     fontWeight: 'bold',
-    transition: 'transform 0.3s',
+    transition: 'all 0.3s ease',
+    cursor: 'pointer',
   },
 };
