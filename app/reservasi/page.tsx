@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 // Lokasi: app/reservasi/page.tsx
 // ✅ PERUBAHAN: Ganti handleSubmit dan tambah fetch harga kost real
 
