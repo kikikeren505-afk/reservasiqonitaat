@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { execute } from '@/lib/db';
+import { query } from '@/lib/db';
 
 export async function POST() {
   try {
-    const updated = await execute(`
+    await query(`
       UPDATE notifications
       SET is_read = true
       WHERE is_read = false
@@ -11,7 +11,7 @@ export async function POST() {
 
     return NextResponse.json({
       success: true,
-      updated,
+      message: 'Notifications marked as read',
     });
   } catch (error) {
     console.error('❌ Error marking notifications as read:', error);
