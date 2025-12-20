@@ -3,9 +3,10 @@ import mysql from 'mysql2/promise';
 // Konfigurasi koneksi database
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '3306'), // ← TAMBAHAN BARU!
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'kost_reservasi', // FIXED: ubah dari 'kos_reservasi' ke 'kost_reservasi'
+  database: process.env.DB_NAME || 'kost_reservasi',
   waitForConnections: true,
   connectionLimit: 10,
   maxIdle: 10,
@@ -21,6 +22,7 @@ let pool: mysql.Pool;
 try {
   pool = mysql.createPool(dbConfig);
   console.log('✅ Database pool created successfully');
+  console.log(`📍 Connecting to: ${dbConfig.host}:${dbConfig.port}/${dbConfig.database}`);
 } catch (error) {
   console.error('❌ Failed to create database pool:', error);
   throw error;
