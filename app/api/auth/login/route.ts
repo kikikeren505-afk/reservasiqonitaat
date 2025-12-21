@@ -1,18 +1,17 @@
 // Lokasi: app/api/auth/login/route.ts
 
 import { NextResponse } from 'next/server';
-import pool from '@/lib/db';
+import { query } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 
 export async function POST(req: Request) {
-  const client = await pool.connect();
-
   try {
     const body = await req.json();
-    console.log('Login attempt for email:', body.email);
-
     const { email, password } = body;
 
+    console.log('Login attempt for email:', email);
+
+    // Validasi input
     if (!email || !password) {
       return NextResponse.json(
         { success: false, message: 'Email dan password harus diisi' },
@@ -20,26 +19,28 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ POSTGRESQL PARAM ($1)
-    const result = await client.query(
+    // ✅ POSTGRES PLACEHOLDER ($1)
+    const users: any[] = await query(
       'SELECT * FROM users WHERE email = $1 LIMIT 1',
       [email]
     );
 
-    if (result.rows.length === 0) {
+    if (users.length === 0) {
       return NextResponse.json(
         { success: false, message: 'Email atau password salah' },
         { status: 401 }
       );
     }
 
-    const user = result.rows[0];
+    const user = users[0];
 
+    // Verifikasi password
     let isPasswordValid = false;
 
-    if (user.password.startsWith('$2')) {
+    if (user.password?.startsWith('$2')) {
       isPasswordValid = await bcrypt.compare(password, user.password);
     } else {
+      // fallback (testing only)
       isPasswordValid = password === user.password;
     }
 
@@ -50,26 +51,34 @@ export async function POST(req: Request) {
       );
     }
 
+    // Response TANPA password
+    const userData = {
+      id: user.id,
+      email: user.email,
+      nama_lengkap: user.nama_lengkap,
+      nomor_hp: user.nomor_hp,
+      alamat: user.alamat,
+      role: user.role,
+      level_name: user.role === 'admin' ? 'Administrator' : 'User',
+    };
+
+    console.log('Login success:', user.email);
+
     return NextResponse.json({
       success: true,
       message: 'Login berhasil',
-      data: {
-        id: user.id,
-        email: user.email,
-        nama_lengkap: user.nama_lengkap,
-        nomor_hp: user.nomor_hp,
-        alamat: user.alamat,
-        role: user.role,
-      },
+      data: userData,
     });
 
   } catch (error: any) {
-    console.error('Login error:', error);
+    console.error('❌ Login error:', error);
+
     return NextResponse.json(
-      { success: false, message: error.message },
+      {
+        success: false,
+        message: 'Terjadi kesalahan server',
+      },
       { status: 500 }
     );
-  } finally {
-    client.release();
   }
 }

@@ -1,10 +1,13 @@
+// Lokasi: lib/db.ts
+// ✅ PRODUCTION READY - SSL Conditional
+
 import { Pool } from 'pg';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false, // ⬅️ INI KUNCI UTAMA
-  },
+  ssl: process.env.NODE_ENV === 'production' 
+    ? { rejectUnauthorized: true }  // ✅ Aman untuk production
+    : { rejectUnauthorized: false }, // ✅ Dev aja yang false
 });
 
 console.log('✅ PostgreSQL pool created successfully');

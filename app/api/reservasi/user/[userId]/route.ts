@@ -1,7 +1,11 @@
 // Lokasi: app/api/reservasi/user/[userId]/route.ts
+// ✅ DIPERBAIKI: Ganti placeholder MySQL (?) ke PostgreSQL ($1)
 
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+
+// ✅ Tambahkan ini untuk fix dynamic server error
+export const dynamic = 'force-dynamic';
 
 export async function GET(
   req: Request,
@@ -14,11 +18,12 @@ export async function GET(
 
     if (!userId) {
       return NextResponse.json(
-        { success: false, error: 'User ID is required' },
+        { success: false, error: 'User ID diperlukan' },
         { status: 400 }
       );
     }
 
+    // DIPERBAIKI: Ganti ? ke $1
     // Query reservasi user beserta detail kost (FIXED - sesuai struktur table)
     const reservasiResult: any = await query(
       `SELECT 
@@ -42,7 +47,7 @@ export async function GET(
         k.gambar
        FROM reservasi r
        LEFT JOIN kost k ON r.kost_id = k.id
-       WHERE r.user_id = ?
+       WHERE r.user_id = $1
        ORDER BY r.created_at DESC`,
       [userId]
     );
@@ -88,7 +93,7 @@ export async function GET(
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to fetch reservasi data',
+        error: 'Gagal mengambil data reservasi',
         message: error.message,
       },
       { status: 500 }

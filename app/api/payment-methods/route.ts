@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     const methods = await db.query(
       `SELECT * FROM payment_methods 
        WHERE is_active = TRUE 
-       ORDER BY method_type, id`
+       ORDER BY type, id`
     );
 
     return NextResponse.json({ data: methods });

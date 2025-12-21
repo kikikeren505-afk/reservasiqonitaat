@@ -1,9 +1,13 @@
 // Lokasi: app/api/payments/submit/route.ts
+// ✅ DIPERBAIKI: Ganti semua placeholder MySQL (?) ke PostgreSQL ($1, $2, dst)
 
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
+
+// ✅ Tambahkan ini untuk fix dynamic server error
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
@@ -58,24 +62,26 @@ export async function POST(req: Request) {
       }
     }
 
+    // DIPERBAIKI: Ganti ? ke $1
     // Cek apakah sudah ada pembayaran untuk reservasi ini
     const existingPayment: any = await query(
-      'SELECT id FROM pembayaran WHERE reservasi_id = ?',
+      'SELECT id FROM pembayaran WHERE reservasi_id = $1',
       [reservasiId]
     );
 
     if (existingPayment.length > 0) {
+      // DIPERBAIKI: Ganti ? ke $1, $2, $3, dst + NOW() ke CURRENT_TIMESTAMP
       // Update pembayaran yang sudah ada
       await query(
         `UPDATE pembayaran 
-         SET metode_pembayaran = ?,
-             nama_pengirim = ?,
-             nama_rekening = ?,
-             tanggal_transfer = ?,
-             bukti_transfer = ?,
+         SET metode_pembayaran = $1,
+             nama_pengirim = $2,
+             nama_rekening = $3,
+             tanggal_transfer = $4,
+             bukti_transfer = $5,
              status = 'pending',
-             updated_at = NOW()
-         WHERE reservasi_id = ?`,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE reservasi_id = $6`,
         [
           metodePembayaran,
           namaPengirim || null,
@@ -87,11 +93,12 @@ export async function POST(req: Request) {
       );
       console.log('Payment updated for reservasi:', reservasiId);
     } else {
+      // DIPERBAIKI: Ganti ? ke $1, $2, $3, dst + NOW() ke CURRENT_TIMESTAMP
       // Insert pembayaran baru
       await query(
         `INSERT INTO pembayaran 
          (reservasi_id, metode_pembayaran, nama_pengirim, nama_rekening, tanggal_transfer, bukti_transfer, status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'pending', NOW())`,
+         VALUES ($1, $2, $3, $4, $5, $6, 'pending', CURRENT_TIMESTAMP)`,
         [
           reservasiId,
           metodePembayaran,
@@ -104,11 +111,12 @@ export async function POST(req: Request) {
       console.log('Payment created for reservasi:', reservasiId);
     }
 
+    // DIPERBAIKI: Ganti ? ke $1
     // Update status pembayaran di tabel reservasi
     await query(
       `UPDATE reservasi 
        SET status_pembayaran = 'pending'
-       WHERE id = ?`,
+       WHERE id = $1`,
       [reservasiId]
     );
 
@@ -146,13 +154,14 @@ export async function GET(req: Request) {
 
     if (!reservasiId) {
       return NextResponse.json(
-        { success: false, error: 'Reservasi ID is required' },
+        { success: false, error: 'Reservasi ID diperlukan' },
         { status: 400 }
       );
     }
 
+    // DIPERBAIKI: Ganti ? ke $1
     const paymentResult: any = await query(
-      `SELECT * FROM pembayaran WHERE reservasi_id = ?`,
+      `SELECT * FROM pembayaran WHERE reservasi_id = $1`,
       [reservasiId]
     );
 
@@ -176,7 +185,7 @@ export async function GET(req: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to fetch payment data',
+        error: 'Gagal mengambil data pembayaran',
         message: error.message,
       },
       { status: 500 }

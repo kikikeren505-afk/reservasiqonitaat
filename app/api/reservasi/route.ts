@@ -1,10 +1,13 @@
 // Lokasi: app/api/reservasi/route.ts
-// ✅ TAMBAHKAN: Auto kirim WhatsApp saat reservasi baru
+// ✅ DIPERBAIKI: Sesuaikan dengan lib/db.ts yang return rows langsung
 
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { query } from '@/lib/db';
 import { notifyAdminNewReservation } from '@/lib/whatsapp';
+
+// ✅ Tambahkan ini untuk fix dynamic server error
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {
@@ -15,11 +18,12 @@ export async function GET(req: Request) {
 
     if (!userId) {
       return NextResponse.json(
-        { success: false, message: 'User ID is required' },
+        { success: false, message: 'User ID diperlukan' },
         { status: 400 }
       );
     }
 
+    // query() sudah return rows langsung
     const reservasiData: any = await query(
       `SELECT 
         r.id,
@@ -37,12 +41,12 @@ export async function GET(req: Request) {
         k.harga as harga_kost
       FROM reservasi r
       LEFT JOIN kost k ON r.kost_id = k.id
-      WHERE r.user_id = ?
+      WHERE r.user_id = $1
       ORDER BY r.created_at DESC`,
       [userId]
     );
 
-    console.log('Reservasi found:', reservasiData?.length || 0);
+    console.log('Reservasi ditemukan:', reservasiData?.length || 0);
 
     return NextResponse.json(
       {
@@ -58,7 +62,7 @@ export async function GET(req: Request) {
     return NextResponse.json(
       {
         success: false,
-        message: 'Failed to fetch reservasi',
+        message: 'Gagal mengambil data reservasi',
         error: error.message,
       },
       { status: 500 }
@@ -94,10 +98,12 @@ export async function POST(req: Request) {
     const tanggalMulaiFormatted = startDate.toISOString().split('T')[0];
     const tanggalSelesaiFormatted = endDate.toISOString().split('T')[0];
 
+    // query() sudah return rows langsung, pakai RETURNING id
     const result: any = await query(
       `INSERT INTO reservasi 
        (user_id, kost_id, tanggal_mulai, tanggal_selesai, durasi_bulan, total_harga, status, catatan)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
+       RETURNING id`,
       [
         user_id,
         kost_id,
@@ -109,13 +115,15 @@ export async function POST(req: Request) {
       ]
     );
 
-    if (result.insertId) {
+    const insertedId = result[0]?.id;
+
+    if (insertedId) {
       revalidatePath('/dashboard/reservasi');
-      console.log('✅ Cache cleared for dashboard reservasi');
+      console.log('✅ Cache dibersihkan untuk dashboard reservasi');
 
       // ✅ KIRIM WHATSAPP KE ADMIN
       try {
-        // Get customer name and kost name
+        // query() sudah return rows langsung
         const reservasiDetail: any = await query(
           `SELECT 
             u.nama_lengkap as customer_name,
@@ -123,8 +131,8 @@ export async function POST(req: Request) {
           FROM reservasi r
           LEFT JOIN users u ON r.user_id = u.id
           LEFT JOIN kost k ON r.kost_id = k.id
-          WHERE r.id = ?`,
-          [result.insertId]
+          WHERE r.id = $1`,
+          [insertedId]
         );
 
         if (reservasiDetail && reservasiDetail.length > 0) {
@@ -138,11 +146,11 @@ export async function POST(req: Request) {
             totalHarga: total_harga,
           });
           
-          console.log('✅ WhatsApp notification sent to admin');
+          console.log('✅ Notifikasi WhatsApp terkirim ke admin');
         }
       } catch (waError) {
-        console.error('⚠️ Failed to send WhatsApp (non-blocking):', waError);
-        // Don't fail the whole request if WA fails
+        console.error('⚠️ Gagal mengirim WhatsApp (non-blocking):', waError);
+        // Jangan gagalkan request jika WA gagal
       }
 
       return NextResponse.json(
@@ -150,7 +158,7 @@ export async function POST(req: Request) {
           success: true,
           message: 'Reservasi berhasil dibuat',
           data: {
-            id: result.insertId,
+            id: insertedId,
             user_id,
             kost_id,
             tanggal_mulai: tanggalMulaiFormatted,
@@ -163,7 +171,7 @@ export async function POST(req: Request) {
         { status: 201 }
       );
     } else {
-      throw new Error('Failed to create reservasi');
+      throw new Error('Gagal membuat reservasi');
     }
 
   } catch (error: any) {
@@ -171,7 +179,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         success: false,
-        message: 'Failed to create reservasi',
+        message: 'Gagal membuat reservasi',
         error: error.message,
       },
       { status: 500 }

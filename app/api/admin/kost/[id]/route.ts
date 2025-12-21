@@ -1,4 +1,5 @@
 // Lokasi: app/api/admin/kost/[id]/route.ts
+// ✅ DIPERBAIKI: Ganti semua placeholder MySQL (?) ke PostgreSQL ($1, $2, dst)
 
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
@@ -13,14 +14,15 @@ export async function GET(
     const kostId = params.id;
     console.log('GET /api/admin/kost/' + kostId);
 
+    // DIPERBAIKI: Ganti ? ke $1
     const kosts: any = await query(
-      'SELECT * FROM kost WHERE id = ?',
+      'SELECT * FROM kost WHERE id = $1',
       [kostId]
     );
 
     if (!kosts || kosts.length === 0) {
       return NextResponse.json(
-        { success: false, message: 'Kost not found' },
+        { success: false, message: 'Kost tidak ditemukan' },
         { status: 404 }
       );
     }
@@ -38,7 +40,7 @@ export async function GET(
     return NextResponse.json(
       {
         success: false,
-        message: 'Failed to fetch kost',
+        message: 'Gagal mengambil data kost',
         error: error.message,
       },
       { status: 500 }
@@ -66,17 +68,18 @@ export async function PUT(
       );
     }
 
-    // Update kost
+    // DIPERBAIKI: Ganti ? ke $1, $2, $3, dst + gunakan RETURNING untuk PostgreSQL
     const result: any = await query(
       `UPDATE kost 
-       SET nama = ?, alamat = ?, harga = ?, deskripsi = ?, fasilitas = ?, status = ?
-       WHERE id = ?`,
+       SET nama = $1, alamat = $2, harga = $3, deskripsi = $4, fasilitas = $5, status = $6
+       WHERE id = $7
+       RETURNING id`,
       [nama, alamat, harga, deskripsi, fasilitas, status, kostId]
     );
 
-    if (result.affectedRows === 0) {
+    if (!result || result.length === 0) {
       return NextResponse.json(
-        { success: false, message: 'Kost not found' },
+        { success: false, message: 'Kost tidak ditemukan' },
         { status: 404 }
       );
     }
@@ -85,7 +88,7 @@ export async function PUT(
     revalidatePath('/admin/kost');
     revalidatePath('/admin/kost/' + kostId);
     revalidatePath('/kost');
-    console.log('✅ Cache cleared for kost pages');
+    console.log('✅ Cache dibersihkan untuk halaman kost');
 
     return NextResponse.json(
       {
@@ -100,7 +103,7 @@ export async function PUT(
     return NextResponse.json(
       {
         success: false,
-        message: 'Failed to update kost',
+        message: 'Gagal mengupdate kost',
         error: error.message,
       },
       { status: 500 }
@@ -117,14 +120,15 @@ export async function DELETE(
     const kostId = params.id;
     console.log('DELETE /api/admin/kost/' + kostId);
 
+    // DIPERBAIKI: Ganti ? ke $1
     // Check if kost has active reservations
     const reservations: any = await query(
       `SELECT COUNT(*) as count FROM reservasi 
-       WHERE kost_id = ? AND status IN ('pending', 'confirmed')`,
+       WHERE kost_id = $1 AND status IN ('pending', 'confirmed')`,
       [kostId]
     );
 
-    if (reservations[0].count > 0) {
+    if (parseInt(reservations[0]?.count) > 0) {
       return NextResponse.json(
         { 
           success: false, 
@@ -134,15 +138,16 @@ export async function DELETE(
       );
     }
 
+    // DIPERBAIKI: Ganti ? ke $1 + gunakan RETURNING untuk PostgreSQL
     // Delete kost
     const result: any = await query(
-      'DELETE FROM kost WHERE id = ?',
+      'DELETE FROM kost WHERE id = $1 RETURNING id',
       [kostId]
     );
 
-    if (result.affectedRows === 0) {
+    if (!result || result.length === 0) {
       return NextResponse.json(
-        { success: false, message: 'Kost not found' },
+        { success: false, message: 'Kost tidak ditemukan' },
         { status: 404 }
       );
     }
@@ -150,7 +155,7 @@ export async function DELETE(
     // Clear cache setelah delete
     revalidatePath('/admin/kost');
     revalidatePath('/kost');
-    console.log('✅ Cache cleared after delete');
+    console.log('✅ Cache dibersihkan setelah delete');
 
     return NextResponse.json(
       {
@@ -165,7 +170,7 @@ export async function DELETE(
     return NextResponse.json(
       {
         success: false,
-        message: 'Failed to delete kost',
+        message: 'Gagal menghapus kost',
         error: error.message,
       },
       { status: 500 }

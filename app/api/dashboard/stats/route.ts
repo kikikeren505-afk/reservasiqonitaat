@@ -3,6 +3,9 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 
+// ✅ Tambahkan ini untuk fix dynamic server error
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -12,33 +15,33 @@ export async function GET(req: Request) {
 
     if (!userId) {
       return NextResponse.json(
-        { success: false, error: 'User ID is required' },
+        { success: false, error: 'User ID diperlukan' },
         { status: 400 }
       );
     }
 
-    // Query total reservasi user
+    // Query total reservasi user - DIPERBAIKI: query() sudah return rows langsung
     const totalReservasiResult: any = await query(
-      'SELECT COUNT(*) as total FROM reservasi WHERE user_id = ?',
+      'SELECT COUNT(*) as total FROM reservasi WHERE user_id = $1',
       [userId]
     );
-    const totalReservasi = totalReservasiResult[0]?.total || 0;
+    const totalReservasi = parseInt(totalReservasiResult[0]?.total) || 0;
 
     // Query reservasi aktif (status pending atau confirmed)
     const reservasiAktifResult: any = await query(
       `SELECT COUNT(*) as total 
        FROM reservasi 
-       WHERE user_id = ? 
+       WHERE user_id = $1 
        AND status IN ('pending', 'confirmed')`,
       [userId]
     );
-    const reservasiAktif = reservasiAktifResult[0]?.total || 0;
+    const reservasiAktif = parseInt(reservasiAktifResult[0]?.total) || 0;
 
     // Query kost tersedia (status = 'tersedia')
     const kostTersediaResult: any = await query(
       "SELECT COUNT(*) as total FROM kost WHERE status = 'tersedia'"
     );
-    const kostTersedia = kostTersediaResult[0]?.total || 0;
+    const kostTersedia = parseInt(kostTersediaResult[0]?.total) || 0;
 
     const stats = {
       totalReservasi,
@@ -61,7 +64,7 @@ export async function GET(req: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to fetch dashboard statistics',
+        error: 'Gagal mengambil statistik dashboard',
         message: error.message,
       },
       { status: 500 }

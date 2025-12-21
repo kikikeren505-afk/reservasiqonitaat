@@ -1,4 +1,5 @@
 // Lokasi: app/api/users/[id]/route.ts
+// ✅ DIPERBAIKI: Ganti semua placeholder MySQL (?) ke PostgreSQL ($1, $2, dst)
 
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
@@ -13,19 +14,20 @@ export async function GET(
 
     if (!userId) {
       return NextResponse.json(
-        { success: false, message: 'User ID is required' },
+        { success: false, message: 'User ID diperlukan' },
         { status: 400 }
       );
     }
 
+    // DIPERBAIKI: Ganti ? ke $1
     const users: any = await query(
-      'SELECT id, nama_lengkap, nomor_hp, alamat, email, role FROM users WHERE id = ?',
+      'SELECT id, nama_lengkap, nomor_hp, alamat, email, role FROM users WHERE id = $1',
       [userId]
     );
 
     if (!users || users.length === 0) {
       return NextResponse.json(
-        { success: false, message: 'User not found' },
+        { success: false, message: 'User tidak ditemukan' },
         { status: 404 }
       );
     }
@@ -43,7 +45,7 @@ export async function GET(
     return NextResponse.json(
       {
         success: false,
-        message: 'Failed to fetch user',
+        message: 'Gagal mengambil data user',
         error: error.message,
       },
       { status: 500 }
@@ -64,7 +66,7 @@ export async function PUT(
 
     if (!userId) {
       return NextResponse.json(
-        { success: false, message: 'User ID is required' },
+        { success: false, message: 'User ID diperlukan' },
         { status: 400 }
       );
     }
@@ -79,24 +81,27 @@ export async function PUT(
       );
     }
 
+    // DIPERBAIKI: Ganti ? ke $1, $2, $3, $4 + gunakan RETURNING
     // Update user data
     const result: any = await query(
       `UPDATE users 
-       SET nama_lengkap = ?, nomor_hp = ?, alamat = ?
-       WHERE id = ?`,
+       SET nama_lengkap = $1, nomor_hp = $2, alamat = $3
+       WHERE id = $4
+       RETURNING id`,
       [nama_lengkap, nomor_hp, alamat, userId]
     );
 
-    if (result.affectedRows === 0) {
+    if (!result || result.length === 0) {
       return NextResponse.json(
-        { success: false, message: 'User not found or no changes made' },
+        { success: false, message: 'User tidak ditemukan atau tidak ada perubahan' },
         { status: 404 }
       );
     }
 
+    // DIPERBAIKI: Ganti ? ke $1
     // Get updated user data
     const updatedUsers: any = await query(
-      'SELECT id, nama_lengkap, nomor_hp, alamat, email, role FROM users WHERE id = ?',
+      'SELECT id, nama_lengkap, nomor_hp, alamat, email, role FROM users WHERE id = $1',
       [userId]
     );
 
@@ -116,7 +121,7 @@ export async function PUT(
     return NextResponse.json(
       {
         success: false,
-        message: 'Failed to update user',
+        message: 'Gagal mengupdate user',
         error: error.message,
       },
       { status: 500 }
