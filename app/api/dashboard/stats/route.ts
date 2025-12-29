@@ -1,7 +1,5 @@
-// Lokasi: app/api/dashboard/stats/route.ts
-
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 // ✅ Tambahkan ini untuk fix dynamic server error
 export const dynamic = 'force-dynamic';
@@ -20,36 +18,38 @@ export async function GET(req: Request) {
       );
     }
 
-    // Query total reservasi user - DIPERBAIKI: query() sudah return rows langsung
-    const totalReservasiResult: any = await query(
-      'SELECT COUNT(*) as total FROM reservasi WHERE user_id = $1',
-      [userId]
-    );
-    const totalReservasi = parseInt(totalReservasiResult[0]?.total) || 0;
+    // Query total reservasi user
+    const { count: totalReservasi, error: error1 } = await supabase
+      .from('reservasi')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId);
+
+    if (error1) throw error1;
 
     // Query reservasi aktif (status pending atau confirmed)
-    const reservasiAktifResult: any = await query(
-      `SELECT COUNT(*) as total 
-       FROM reservasi 
-       WHERE user_id = $1 
-       AND status IN ('pending', 'confirmed')`,
-      [userId]
-    );
-    const reservasiAktif = parseInt(reservasiAktifResult[0]?.total) || 0;
+    const { count: reservasiAktif, error: error2 } = await supabase
+      .from('reservasi')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .in('status', ['pending', 'confirmed']);
 
-    // Query kost tersedia (status = 'tersedia')
-    const kostTersediaResult: any = await query(
-      "SELECT COUNT(*) as total FROM kost WHERE status = 'tersedia'"
-    );
-    const kostTersedia = parseInt(kostTersediaResult[0]?.total) || 0;
+    if (error2) throw error2;
+
+    // Query kost tersedia
+    const { count: kostTersedia, error: error3 } = await supabase
+      .from('kost')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'tersedia');
+
+    if (error3) throw error3;
 
     const stats = {
-      totalReservasi,
-      reservasiAktif,
-      kostTersedia,
+      totalReservasi: totalReservasi || 0,
+      reservasiAktif: reservasiAktif || 0,
+      kostTersedia: kostTersedia || 0,
     };
 
-    console.log('Dashboard stats:', stats);
+    console.log('✅ Dashboard stats:', stats);
 
     return NextResponse.json(
       {
@@ -60,7 +60,7 @@ export async function GET(req: Request) {
     );
 
   } catch (error: any) {
-    console.error('Error fetching dashboard stats:', error);
+    console.error('❌ Error fetching dashboard stats:', error);
     return NextResponse.json(
       {
         success: false,

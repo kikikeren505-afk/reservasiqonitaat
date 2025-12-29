@@ -1,20 +1,22 @@
-// Lokasi: app/api/health/route.ts
-// ✅ DIPERBAIKI: Pakai query() function yang sudah return rows
-
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 export async function GET() {
   try {
-    // Test database connection
-    const result = await query('SELECT 1 as test, NOW() as timestamp');
+    // Test Supabase connection
+    const { data, error } = await supabase
+      .from('users')
+      .select('id')
+      .limit(1);
+
+    if (error) throw error;
 
     return NextResponse.json({
       status: 'ok',
       message: 'API is running',
       database: 'connected',
       timestamp: new Date().toISOString(),
-      dbTest: result[0], // ✅ result sudah array, langsung akses [0]
+      supabase: 'healthy',
     });
   } catch (error: any) {
     console.error('❌ Health check failed:', error);

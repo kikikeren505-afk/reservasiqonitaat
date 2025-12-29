@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query, queryOne } from "@/lib/db";
+import { supabase } from "@/lib/supabase";
 import bcrypt from "bcryptjs";
 
 export async function POST(request: NextRequest) {
@@ -7,7 +7,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { nama_lengkap, password, confirmPassword, alamat, nomor_hp, email } = body;
 
-    // Validasi
+    console.log('📝 Register attempt:', { email, nomor_hp });
+
+    // Validasi input
     if (!nama_lengkap || !password || !confirmPassword || !alamat || !nomor_hp || !email) {
       return NextResponse.json(
         { message: "Semua field harus diisi" },
@@ -29,13 +31,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Cek user sudah ada atau belum
-    const existingUser = await queryOne(
-      "SELECT id FROM users WHERE email = ? OR nomor_hp = ?",
-      [email, nomor_hp]
-    );
+    // Cek apakah user sudah ada
+    const { data: existingUsers, error: checkError } = await supabase
+      .from('users')
+      .select('id')
+      .or(`email.eq.${email},nomor_hp.eq.${nomor_hp}`)
+      .limit(1);
 
-    if (existingUser) {
+    if (checkError) {
+      console.error('❌ Check user error:', checkError);
+      return NextResponse.json(
+        { message: "Terjadi kesalahan saat memeriksa data" },
+        { status: 500 }
+      );
+    }
+
+    if (existingUsers && existingUsers.length > 0) {
+      console.log('⚠️ User already exists:', existingUsers[0]);
       return NextResponse.json(
         { message: "Email atau nomor HP sudah terdaftar" },
         { status: 409 }
@@ -46,23 +58,46 @@ export async function POST(request: NextRequest) {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Insert user baru
-    const result: any = await query(
-      `INSERT INTO users (nama_lengkap, email, nomor_hp, alamat, password, role)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [nama_lengkap, email, nomor_hp, alamat, hashedPassword, 'user']
-    );
+    const { data: newUser, error: insertError } = await supabase
+      .from('users')
+      .insert([
+        {
+          nama_lengkap,
+          email,
+          nomor_hp,
+          alamat,
+          password: hashedPassword,
+          role: 'user'
+        }
+      ])
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('❌ Insert user error:', insertError);
+      return NextResponse.json(
+        { message: "Gagal mendaftarkan user: " + insertError.message },
+        { status: 500 }
+      );
+    }
+
+    console.log('✅ User registered:', newUser.id);
 
     return NextResponse.json(
       {
         message: "Registrasi berhasil! Silakan login.",
-        user_id: result.insertId,
+        user_id: newUser.id,
       },
       { status: 201 }
     );
-  } catch (error) {
-    console.error("Register error:", error);
+    
+  } catch (error: any) {
+    console.error("❌ Register error:", error);
     return NextResponse.json(
-      { message: "Terjadi kesalahan server" },
+      { 
+        message: "Terjadi kesalahan server",
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
   }

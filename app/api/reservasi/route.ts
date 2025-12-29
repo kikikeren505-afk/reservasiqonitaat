@@ -1,9 +1,8 @@
-// Lokasi: app/api/reservasi/route.ts
-// ✅ DIPERBAIKI: Sesuaikan dengan lib/db.ts yang return rows langsung
+// Lokasi: app/api/reservasi/route.ts - FIXED VERSION
 
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
-import { query } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import { notifyAdminNewReservation } from '@/lib/whatsapp';
 
 // ✅ Tambahkan ini untuk fix dynamic server error
@@ -23,42 +22,73 @@ export async function GET(req: Request) {
       );
     }
 
-    // query() sudah return rows langsung
-    const reservasiData: any = await query(
-      `SELECT 
-        r.id,
-        r.user_id,
-        r.kost_id,
-        r.tanggal_mulai,
-        r.tanggal_selesai,
-        r.durasi_bulan,
-        r.total_harga,
-        r.status,
-        r.catatan,
-        r.created_at,
-        k.nama as nama_kost,
-        k.alamat as alamat_kost,
-        k.harga as harga_kost
-      FROM reservasi r
-      LEFT JOIN kost k ON r.kost_id = k.id
-      WHERE r.user_id = $1
-      ORDER BY r.created_at DESC`,
-      [userId]
-    );
+    // ✅ FIXED: Query reservasi dengan JOIN ke kost DAN pembayaran
+    const { data: reservasiData, error } = await supabase
+      .from('reservasi')
+      .select(`
+        id,
+        user_id,
+        kost_id,
+        tanggal_mulai,
+        tanggal_selesai,
+        durasi_bulan,
+        total_harga,
+        status,
+        catatan,
+        created_at,
+        kost:kost_id (
+          nama,
+          alamat,
+          harga
+        ),
+        pembayaran!pembayaran_reservasi_id_fkey (
+          id,
+          status,
+          metode_pembayaran,
+          bukti_pembayaran,
+          keterangan,
+          created_at
+        )
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
 
-    console.log('Reservasi ditemukan:', reservasiData?.length || 0);
+    if (error) {
+      console.error('❌ Supabase error:', error);
+      throw new Error(error.message);
+    }
+
+    // Transform data untuk match format lama
+    const transformedData = reservasiData?.map((item: any) => {
+      // Sort pembayaran by created_at descending (terbaru dulu)
+      const sortedPayments = item.pembayaran?.sort((a: any, b: any) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      ) || [];
+
+      return {
+        ...item,
+        nama_kost: item.kost?.nama || null,
+        alamat_kost: item.kost?.alamat || null,
+        harga_kost: item.kost?.harga || null,
+        // ✅ Pembayaran sudah otomatis ada karena JOIN di atas, sorted by newest
+        pembayaran: sortedPayments
+      };
+    }) || [];
+
+    console.log('✅ Reservasi ditemukan:', transformedData.length);
+    console.log('📦 Data dengan pembayaran:', JSON.stringify(transformedData, null, 2));
 
     return NextResponse.json(
       {
         success: true,
-        data: reservasiData || [],
-        count: reservasiData?.length || 0,
+        data: transformedData,
+        count: transformedData.length,
       },
       { status: 200 }
     );
 
   } catch (error: any) {
-    console.error('Error fetching reservasi:', error);
+    console.error('❌ Error fetching reservasi:', error);
     return NextResponse.json(
       {
         success: false,
@@ -98,84 +128,85 @@ export async function POST(req: Request) {
     const tanggalMulaiFormatted = startDate.toISOString().split('T')[0];
     const tanggalSelesaiFormatted = endDate.toISOString().split('T')[0];
 
-    // query() sudah return rows langsung, pakai RETURNING id
-    const result: any = await query(
-      `INSERT INTO reservasi 
-       (user_id, kost_id, tanggal_mulai, tanggal_selesai, durasi_bulan, total_harga, status, catatan)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
-       RETURNING id`,
-      [
+    // Insert reservasi menggunakan Supabase
+    const { data: newReservasi, error } = await supabase
+      .from('reservasi')
+      .insert({
         user_id,
         kost_id,
-        tanggalMulaiFormatted,
-        tanggalSelesaiFormatted,
+        tanggal_mulai: tanggalMulaiFormatted,
+        tanggal_selesai: tanggalSelesaiFormatted,
         durasi_bulan,
         total_harga,
-        catatan || null
-      ]
-    );
+        status: 'pending',
+        catatan: catatan || null
+      })
+      .select()
+      .single();
 
-    const insertedId = result[0]?.id;
-
-    if (insertedId) {
-      revalidatePath('/dashboard/reservasi');
-      console.log('✅ Cache dibersihkan untuk dashboard reservasi');
-
-      // ✅ KIRIM WHATSAPP KE ADMIN
-      try {
-        // query() sudah return rows langsung
-        const reservasiDetail: any = await query(
-          `SELECT 
-            u.nama_lengkap as customer_name,
-            k.nama as kost_name
-          FROM reservasi r
-          LEFT JOIN users u ON r.user_id = u.id
-          LEFT JOIN kost k ON r.kost_id = k.id
-          WHERE r.id = $1`,
-          [insertedId]
-        );
-
-        if (reservasiDetail && reservasiDetail.length > 0) {
-          const detail = reservasiDetail[0];
-          
-          await notifyAdminNewReservation({
-            customerName: detail.customer_name || 'Unknown',
-            kostName: detail.kost_name || 'Unknown',
-            tanggalMulai: tanggalMulaiFormatted,
-            durasi: durasi_bulan,
-            totalHarga: total_harga,
-          });
-          
-          console.log('✅ Notifikasi WhatsApp terkirim ke admin');
-        }
-      } catch (waError) {
-        console.error('⚠️ Gagal mengirim WhatsApp (non-blocking):', waError);
-        // Jangan gagalkan request jika WA gagal
-      }
-
-      return NextResponse.json(
-        {
-          success: true,
-          message: 'Reservasi berhasil dibuat',
-          data: {
-            id: insertedId,
-            user_id,
-            kost_id,
-            tanggal_mulai: tanggalMulaiFormatted,
-            tanggal_selesai: tanggalSelesaiFormatted,
-            durasi_bulan,
-            total_harga,
-            status: 'pending'
-          }
-        },
-        { status: 201 }
-      );
-    } else {
-      throw new Error('Gagal membuat reservasi');
+    if (error) {
+      console.error('❌ Supabase error:', error);
+      throw new Error(error.message);
     }
 
+    const insertedId = newReservasi.id;
+    console.log('✅ Reservasi created:', insertedId);
+
+    revalidatePath('/dashboard/reservasi');
+    console.log('✅ Cache dibersihkan untuk dashboard reservasi');
+
+    // ✅ KIRIM WHATSAPP KE ADMIN
+    try {
+      // Query detail untuk WhatsApp notification
+      const { data: reservasiDetail, error: detailError } = await supabase
+        .from('reservasi')
+        .select(`
+          users:user_id (
+            nama_lengkap
+          ),
+          kost:kost_id (
+            nama
+          )
+        `)
+        .eq('id', insertedId)
+        .single();
+
+      if (!detailError && reservasiDetail) {
+        await notifyAdminNewReservation({
+          customerName: (reservasiDetail as any).users?.nama_lengkap || 'Unknown',
+          kostName: (reservasiDetail as any).kost?.nama || 'Unknown',
+          tanggalMulai: tanggalMulaiFormatted,
+          durasi: durasi_bulan,
+          totalHarga: total_harga,
+        });
+        
+        console.log('✅ Notifikasi WhatsApp terkirim ke admin');
+      }
+    } catch (waError) {
+      console.error('⚠️ Gagal mengirim WhatsApp (non-blocking):', waError);
+      // Jangan gagalkan request jika WA gagal
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: 'Reservasi berhasil dibuat',
+        data: {
+          id: insertedId,
+          user_id,
+          kost_id,
+          tanggal_mulai: tanggalMulaiFormatted,
+          tanggal_selesai: tanggalSelesaiFormatted,
+          durasi_bulan,
+          total_harga,
+          status: 'pending'
+        }
+      },
+      { status: 201 }
+    );
+
   } catch (error: any) {
-    console.error('Error creating reservasi:', error);
+    console.error('❌ Error creating reservasi:', error);
     return NextResponse.json(
       {
         success: false,

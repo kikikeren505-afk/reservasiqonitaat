@@ -1,81 +1,60 @@
-// Lokasi: app/api/admin/kost/route.ts
-
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
-// GET - Ambil semua kost
-export async function GET(req: Request) {
+export const dynamic = 'force-dynamic';
+
+export async function GET() {
   try {
-    console.log('GET /api/admin/kost');
+    console.log('✅ Fetching kost data from Supabase...');
+    
+    const { data: kost, error } = await supabase
+      .from('kost')
+      .select('*')
+      .order('id', { ascending: true });
 
-    const kosts: any = await query(
-      'SELECT * FROM kost ORDER BY created_at DESC'
-    );
+    if (error) {
+      console.error('❌ Supabase error:', error);
+      throw error;
+    }
 
-    return NextResponse.json(
-      {
-        success: true,
-        data: kosts || [],
-        count: kosts?.length || 0,
-      },
-      { status: 200 }
-    );
+    console.log(`✅ Kost found: ${kost?.length || 0}`);
 
+    return NextResponse.json({
+      success: true,
+      data: kost || []
+    });
   } catch (error: any) {
-    console.error('Error fetching kosts:', error);
+    console.error('❌ Error fetching kost:', error);
     return NextResponse.json(
-      {
-        success: false,
-        message: 'Failed to fetch kosts',
-        error: error.message,
-      },
+      { success: false, error: error.message },
       { status: 500 }
     );
   }
 }
 
-// POST - Tambah kost baru
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    console.log('POST /api/admin/kost - data:', body);
+    console.log('Creating kost:', body);
 
-    const { nama, alamat, harga, deskripsi, fasilitas, status } = body;
+    const { data: newKost, error } = await supabase
+      .from('kost')
+      .insert([body])
+      .select()
+      .single();
 
-    // Validasi
-    if (!nama || !alamat || !harga || !deskripsi || !fasilitas || !status) {
-      return NextResponse.json(
-        { success: false, message: 'Semua field harus diisi' },
-        { status: 400 }
-      );
-    }
+    if (error) throw error;
 
-    // Insert kost
-    const result: any = await query(
-      `INSERT INTO kost (nama, alamat, harga, deskripsi, fasilitas, status) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [nama, alamat, harga, deskripsi, fasilitas, status]
-    );
+    console.log('✅ Kost created:', newKost);
 
-    console.log('Kost created with ID:', result.insertId);
-
-    return NextResponse.json(
-      {
-        success: true,
-        message: 'Kost berhasil ditambahkan',
-        data: { id: result.insertId },
-      },
-      { status: 201 }
-    );
-
+    return NextResponse.json({
+      success: true,
+      data: newKost
+    }, { status: 201 });
   } catch (error: any) {
-    console.error('Error creating kost:', error);
+    console.error('❌ Error creating kost:', error);
     return NextResponse.json(
-      {
-        success: false,
-        message: 'Failed to create kost',
-        error: error.message,
-      },
+      { success: false, error: error.message },
       { status: 500 }
     );
   }

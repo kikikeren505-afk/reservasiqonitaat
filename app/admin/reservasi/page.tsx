@@ -1,9 +1,9 @@
-// Lokasi: app/admin/reservasi/page.tsx
-
+// app/admin/reservasi/page.tsx - WITH DEBUG LOGS
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 interface Reservasi {
   id: number;
@@ -28,9 +28,49 @@ export default function AdminReservasiPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
+  const [updating, setUpdating] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState(new Date());
+  const [isRealTimeActive, setIsRealTimeActive] = useState(false);
+
+  const fetchReservasi = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('🔄 Fetching reservasi data...');
+      
+      const timestamp = new Date().getTime();
+      const response = await fetch(`/api/admin/reservasi?_t=${timestamp}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+        },
+      });
+
+      const data = await response.json();
+      
+      console.log('📊 Reservasi response:', data);
+      
+      if (response.ok && data.success) {
+        const reservasiData = Array.isArray(data.data) ? data.data : [];
+        console.log('✅ Reservasi loaded:', reservasiData.length);
+        setReservasi(reservasiData);
+        setLastUpdate(new Date());
+      } else {
+        setError(data.message || 'Gagal memuat data reservasi');
+        setReservasi([]);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching reservasi:', error);
+      setError('Terjadi kesalahan saat memuat data');
+      setReservasi([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    // Check admin access
     const userData = sessionStorage.getItem('user') || localStorage.getItem('user');
     
     if (!userData) {
@@ -48,64 +88,154 @@ export default function AdminReservasiPage() {
       }
       
       fetchReservasi();
+      
+      console.log('🔔 Setting up Real-time subscription...');
+      
+      const channel = supabase
+        .channel('admin-reservasi-channel')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'reservasi'
+          },
+          (payload) => {
+            console.log('🔥 REAL-TIME UPDATE DETECTED!', payload);
+            
+            if (payload.eventType === 'INSERT') {
+              console.log('➕ Reservasi BARU ditambahkan!');
+              showNotification('Reservasi Baru!', 'Ada reservasi baru masuk');
+            } else if (payload.eventType === 'UPDATE') {
+              console.log('✏️ Reservasi diupdate!');
+              showNotification('Reservasi Diupdate', 'Status reservasi berubah');
+            } else if (payload.eventType === 'DELETE') {
+              console.log('🗑️ Reservasi dihapus!');
+            }
+            
+            fetchReservasi();
+          }
+        )
+        .subscribe((status) => {
+          console.log('📡 Subscription status:', status);
+          
+          if (status === 'SUBSCRIBED') {
+            console.log('✅ Real-time ACTIVE!');
+            setIsRealTimeActive(true);
+          } else if (status === 'CLOSED') {
+            console.log('❌ Real-time CLOSED');
+            setIsRealTimeActive(false);
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('❌ Real-time CHANNEL ERROR');
+            setIsRealTimeActive(false);
+          }
+        });
+
+      return () => {
+        console.log('🔌 Cleaning up real-time subscription...');
+        supabase.removeChannel(channel);
+        setIsRealTimeActive(false);
+      };
+      
     } catch (error) {
       console.error('Error:', error);
       router.push('/login');
     }
-  }, [router]);
+  }, [router, fetchReservasi]);
 
-  const fetchReservasi = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await fetch('/api/admin/reservasi', {
-        cache: 'no-store',
-      });
-
-      const data = await response.json();
-      
-      if (response.ok && data.success) {
-        const reservasiData = Array.isArray(data.data) ? data.data : [];
-        setReservasi(reservasiData);
-      } else {
-        setError(data.message || 'Gagal memuat data reservasi');
-        setReservasi([]);
+  const showNotification = (title: string, body: string) => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        new Notification(title, {
+          body,
+          icon: '/favicon.ico',
+        });
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then(permission => {
+          if (permission === 'granted') {
+            new Notification(title, { body });
+          }
+        });
       }
-    } catch (error) {
-      console.error('Error fetching reservasi:', error);
-      setError('Terjadi kesalahan saat memuat data');
-      setReservasi([]);
-    } finally {
-      setLoading(false);
     }
   };
 
+  // ✅ FUNCTION WITH DEBUG LOGS
   const handleUpdateStatus = async (id: number, newStatus: string) => {
+    console.log('🔥 FUNCTION CALLED!', { 
+      id, 
+      newStatus, 
+      timestamp: new Date().toISOString(),
+      updating 
+    });
+    
     if (!confirm(`Ubah status reservasi menjadi "${newStatus}"?`)) {
+      console.log('❌ User cancelled confirmation');
+      return;
+    }
+
+    console.log('✅ User confirmed, proceeding with update...');
+
+    if (updating) {
+      console.log('⏳ Already updating, please wait...');
       return;
     }
 
     try {
-      const response = await fetch(`/api/admin/reservasi/${id}`, {
+      setUpdating(true);
+      console.log(`🔄 Updating reservasi ${id} to ${newStatus}...`);
+      
+      const response = await fetch(`/api/admin/reservasi/${id}?nocache=${Date.now()}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
         },
         body: JSON.stringify({ status: newStatus }),
       });
 
       const data = await response.json();
+      console.log('📡 Update response:', data);
 
       if (response.ok && data.success) {
-        alert('Status reservasi berhasil diupdate!');
-        fetchReservasi();
+        console.log('✅ Update successful!');
+        console.log('🧹 Clearing all caches...');
+        
+        // ✅ SOLUSI NUCLEAR: Clear semua cache browser
+        if ('caches' in window) {
+          caches.keys().then(names => {
+            console.log('🗑️ Deleting caches:', names);
+            names.forEach(name => caches.delete(name));
+          });
+        }
+        
+        // Clear sessionStorage & localStorage (kecuali user data)
+        const userData = sessionStorage.getItem('user') || localStorage.getItem('user');
+        sessionStorage.clear();
+        localStorage.clear();
+        if (userData) {
+          sessionStorage.setItem('user', userData);
+        }
+        
+        console.log('✅ Cache cleared!');
+        console.log('🔄 Force redirecting...');
+        
+        // Tunggu sebentar untuk memastikan cache terhapus
+        setTimeout(() => {
+          // Force redirect dengan timestamp
+          window.location.href = `/admin/reservasi?cleared=true&t=${Date.now()}`;
+        }, 200);
+        
       } else {
-        alert(data.message || 'Gagal mengupdate status');
+        console.error('❌ Update failed:', data);
+        alert('❌ ' + (data.message || 'Gagal mengupdate status'));
+        setUpdating(false);
       }
     } catch (error) {
-      console.error('Error updating status:', error);
-      alert('Terjadi kesalahan saat mengupdate status');
+      console.error('❌ Error updating status:', error);
+      alert('❌ Terjadi kesalahan saat mengupdate status');
+      setUpdating(false);
     }
   };
 
@@ -159,7 +289,7 @@ export default function AdminReservasiPage() {
     ? reservasi 
     : reservasi.filter(r => r.status.toLowerCase() === filter);
 
-  if (loading) {
+  if (loading && reservasi.length === 0) {
     return (
       <div style={styles.loadingContainer}>
         <div style={styles.spinner}></div>
@@ -175,13 +305,61 @@ export default function AdminReservasiPage() {
           <h1 style={styles.title}>Kelola Reservasi</h1>
           <p style={styles.subtitle}>Manage semua reservasi pengguna</p>
         </div>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            padding: '0.75rem 1.25rem',
+            background: isRealTimeActive ? '#d1fae5' : '#fee2e2',
+            borderRadius: '10px',
+            border: `2px solid ${isRealTimeActive ? '#10b981' : '#ef4444'}`,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{
+              width: '10px',
+              height: '10px',
+              borderRadius: '50%',
+              background: isRealTimeActive ? '#10b981' : '#ef4444',
+              animation: isRealTimeActive ? 'pulse 2s infinite' : 'none'
+            }}></div>
+            <span style={{
+              fontSize: '0.9rem',
+              fontWeight: 700,
+              color: isRealTimeActive ? '#047857' : '#dc2626'
+            }}>
+              {isRealTimeActive ? '🟢 Real-time Active' : '🔴 Real-time Inactive'}
+            </span>
+          </div>
+          <span style={{ fontSize: '0.8rem', color: '#666' }}>
+            📅 Update terakhir: {lastUpdate.toLocaleTimeString('id-ID')}
+          </span>
+          <button
+            onClick={fetchReservasi}
+            disabled={loading}
+            style={{
+              padding: '0.65rem 1.25rem',
+              background: '#2563eb',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              fontWeight: 600,
+              fontSize: '0.9rem',
+              opacity: loading ? 0.6 : 1,
+              transition: 'all 0.3s'
+            }}
+          >
+            {loading ? '⏳ Loading...' : '🔄 Refresh Manual'}
+          </button>
+        </div>
       </div>
 
       <div style={styles.backLink}>
         <a href="/admin" style={styles.link}>← Kembali ke Dashboard</a>
       </div>
 
-      {/* Filter */}
       <div style={styles.filterBar}>
         <button
           onClick={() => setFilter('all')}
@@ -268,6 +446,12 @@ export default function AdminReservasiPage() {
                     <span style={styles.infoValue}>#{item.id}</span>
                   </div>
                   <div style={styles.infoItem}>
+                    <span style={styles.infoLabel}>Status Saat Ini:</span>
+                    <span style={{...styles.infoValue, fontWeight: 600, color: getStatusColor(item.status)}}>
+                      {item.status.toUpperCase()}
+                    </span>
+                  </div>
+                  <div style={styles.infoItem}>
                     <span style={styles.infoLabel}>Durasi:</span>
                     <span style={styles.infoValue}>{item.durasi_bulan} Bulan</span>
                   </div>
@@ -298,41 +482,135 @@ export default function AdminReservasiPage() {
               </div>
 
               <div style={styles.cardFooter}>
-                <strong>Ubah Status:</strong>
-                <div style={styles.actionBtns}>
-                  {item.status === 'pending' && (
-                    <>
+                {item.status.toLowerCase() === 'pending' ? (
+                  <>
+                    <strong style={{ marginBottom: '0.75rem', display: 'block' }}>Ubah Status:</strong>
+                    <div style={styles.actionBtns}>
                       <button
-                        onClick={() => handleUpdateStatus(item.id, 'confirmed')}
-                        style={styles.confirmBtn}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log('🎯 CONFIRM BUTTON CLICKED!', { 
+                            id: item.id, 
+                            currentStatus: item.status,
+                            targetStatus: 'confirmed'
+                          });
+                          handleUpdateStatus(item.id, 'confirmed');
+                        }}
+                        disabled={updating}
+                        style={{
+                          ...styles.confirmBtn,
+                          cursor: updating ? 'not-allowed' : 'pointer',
+                          opacity: updating ? 0.6 : 1,
+                        }}
                       >
-                        ✓ Konfirmasi
+                        {updating ? '⏳ Processing...' : '✓ Konfirmasi'}
                       </button>
                       <button
-                        onClick={() => handleUpdateStatus(item.id, 'cancelled')}
-                        style={styles.cancelBtn}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log('🎯 CANCEL BUTTON CLICKED!', { 
+                            id: item.id, 
+                            currentStatus: item.status,
+                            targetStatus: 'cancelled'
+                          });
+                          handleUpdateStatus(item.id, 'cancelled');
+                        }}
+                        disabled={updating}
+                        style={{
+                          ...styles.cancelBtn,
+                          cursor: updating ? 'not-allowed' : 'pointer',
+                          opacity: updating ? 0.6 : 1,
+                        }}
                       >
-                        ✗ Tolak
+                        {updating ? '⏳ Processing...' : '✗ Tolak'}
                       </button>
-                    </>
-                  )}
-                  {item.status === 'confirmed' && (
+                    </div>
+                  </>
+                ) : item.status.toLowerCase() === 'confirmed' ? (
+                  <>
+                    <div style={{
+                      ...styles.statusInfoBox,
+                      background: '#d1fae5',
+                      borderLeft: '4px solid #10b981'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '1.5rem' }}>✅</span>
+                        <strong style={{ color: '#065f46' }}>Reservasi Dikonfirmasi</strong>
+                      </div>
+                      <p style={{ fontSize: '0.85rem', color: '#047857', margin: 0 }}>
+                        Reservasi ini telah dikonfirmasi dan menunggu penyelesaian.
+                      </p>
+                    </div>
                     <button
-                      onClick={() => handleUpdateStatus(item.id, 'completed')}
-                      style={styles.completeBtn}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('🎯 COMPLETE BUTTON CLICKED!', { 
+                          id: item.id, 
+                          currentStatus: item.status,
+                          targetStatus: 'completed'
+                        });
+                        handleUpdateStatus(item.id, 'completed');
+                      }}
+                      disabled={updating}
+                      style={{
+                        ...styles.completeBtn,
+                        cursor: updating ? 'not-allowed' : 'pointer',
+                        opacity: updating ? 0.6 : 1,
+                        marginTop: '0.75rem',
+                        width: '100%'
+                      }}
                     >
-                      ✓ Selesaikan
+                      {updating ? '⏳ Processing...' : '✓ Tandai Selesai'}
                     </button>
-                  )}
-                  {(item.status === 'completed' || item.status === 'cancelled') && (
-                    <span style={styles.finalStatus}>Status final - tidak dapat diubah</span>
-                  )}
-                </div>
+                  </>
+                ) : item.status.toLowerCase() === 'completed' ? (
+                  <div style={{
+                    ...styles.statusInfoBox,
+                    background: '#f3f4f6',
+                    borderLeft: '4px solid #6b7280'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '1.5rem' }}>✓</span>
+                      <strong style={{ color: '#374151' }}>Reservasi Selesai</strong>
+                    </div>
+                    <p style={{ fontSize: '0.85rem', color: '#4b5563', margin: 0 }}>
+                      Reservasi ini telah selesai dan tidak dapat diubah lagi.
+                    </p>
+                  </div>
+                ) : item.status.toLowerCase() === 'cancelled' ? (
+                  <div style={{
+                    ...styles.statusInfoBox,
+                    background: '#fee2e2',
+                    borderLeft: '4px solid #ef4444'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '1.5rem' }}>✗</span>
+                      <strong style={{ color: '#991b1b' }}>Reservasi Dibatalkan</strong>
+                    </div>
+                    <p style={{ fontSize: '0.85rem', color: '#dc2626', margin: 0 }}>
+                      Reservasi ini telah dibatalkan dan tidak dapat diubah lagi.
+                    </p>
+                  </div>
+                ) : null}
               </div>
             </div>
           ))}
         </div>
       )}
+      
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.6; transform: scale(1.1); }
+        }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }
@@ -361,6 +639,11 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   header: {
     marginBottom: '2rem',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    gap: '1rem',
   },
   title: {
     fontSize: '2rem',
@@ -430,6 +713,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '15px',
     boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
     overflow: 'hidden',
+    transition: 'all 0.3s',
   },
   cardHeader: {
     padding: '1.5rem',
@@ -443,6 +727,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '1.3rem',
     color: '#333',
     marginBottom: '0.5rem',
+    fontWeight: 'bold',
   },
   userName: {
     color: '#666',
@@ -488,6 +773,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '1rem',
     borderRadius: '8px',
     borderLeft: '4px solid #f59e0b',
+    marginTop: '1rem',
   },
   cardFooter: {
     padding: '1rem 1.5rem',
@@ -498,6 +784,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     gap: '1rem',
     marginTop: '0.5rem',
+    flexWrap: 'wrap',
   },
   confirmBtn: {
     padding: '0.75rem 1.5rem',
@@ -507,6 +794,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '8px',
     cursor: 'pointer',
     fontWeight: 600,
+    transition: 'all 0.3s',
   },
   cancelBtn: {
     padding: '0.75rem 1.5rem',
@@ -516,6 +804,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '8px',
     cursor: 'pointer',
     fontWeight: 600,
+    transition: 'all 0.3s',
   },
   completeBtn: {
     padding: '0.75rem 1.5rem',
@@ -525,9 +814,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '8px',
     cursor: 'pointer',
     fontWeight: 600,
+    transition: 'all 0.3s',
   },
-  finalStatus: {
-    color: '#666',
-    fontStyle: 'italic',
+  statusInfoBox: {
+    padding: '1rem',
+    borderRadius: '10px',
+    marginBottom: '0.5rem',
   },
 };

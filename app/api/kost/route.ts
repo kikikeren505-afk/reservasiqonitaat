@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 // GET all kost data
 export async function GET(request: NextRequest) {
@@ -7,32 +7,34 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') || 'tersedia';
 
-    const kosts: any = await query(
-      `SELECT dk.*, 
-              GROUP_CONCAT(DISTINCT k.Kategori_id) as kategori_ids,
-              GROUP_CONCAT(DISTINCT k.Harga) as harga_list,
-              GROUP_CONCAT(DISTINCT k.Ukuran_kamar) as ukuran_list,
-              GROUP_CONCAT(DISTINCT k.Fasilitas) as fasilitas_list
-       FROM Data_Kost dk
-       LEFT JOIN Kategori k ON dk.Kost_id = k.Kost_id
-       WHERE LOWER(dk.Status) = LOWER(?)
-       GROUP BY dk.Kost_id
-       ORDER BY dk.Kost_id DESC`,
-      [status]
-    );
+    console.log('GET /api/kost - status:', status);
+
+    // Query kost dengan filter status
+    const { data: kosts, error } = await supabase
+      .from('kost')
+      .select('*')
+      .ilike('status', status)
+      .order('id', { ascending: false });
+
+    if (error) {
+      console.error('❌ Supabase error:', error);
+      throw new Error(error.message);
+    }
+
+    console.log('✅ Kosts found:', kosts?.length || 0);
 
     return NextResponse.json(
       {
         message: 'Data kost berhasil diambil',
-        data: kosts
+        data: kosts || []
       },
       { status: 200 }
     );
 
-  } catch (error) {
-    console.error('Get kost error:', error);
+  } catch (error: any) {
+    console.error('❌ Get kost error:', error);
     return NextResponse.json(
-      { message: 'Terjadi kesalahan server' },
+      { message: 'Terjadi kesalahan server', error: error.message },
       { status: 500 }
     );
   }
@@ -51,28 +53,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result: any = await query(
-      `INSERT INTO Data_Kost (Nama_kost, Alamat_kost, Deskripsi, Status) 
-       VALUES (?, ?, ?, ?)`,
-      [nama_kost, alamat_kost, deskripsi || '', status || 'tersedia']
-    );
+    // Insert kost baru menggunakan Supabase
+    const { data: newKost, error } = await supabase
+      .from('kost')
+      .insert({
+        nama: nama_kost,
+        alamat: alamat_kost,
+        deskripsi: deskripsi || '',
+        status: status || 'tersedia'
+      })
+      .select()
+      .single();
 
-    if (result.insertId) {
-      return NextResponse.json(
-        {
-          message: 'Kost berhasil ditambahkan',
-          kost_id: result.insertId
-        },
-        { status: 201 }
-      );
-    } else {
-      throw new Error('Failed to create kost');
+    if (error) {
+      console.error('❌ Supabase error:', error);
+      throw new Error(error.message);
     }
 
-  } catch (error) {
-    console.error('Create kost error:', error);
+    console.log('✅ Kost created:', newKost.id);
+
     return NextResponse.json(
-      { message: 'Terjadi kesalahan server' },
+      {
+        message: 'Kost berhasil ditambahkan',
+        kost_id: newKost.id
+      },
+      { status: 201 }
+    );
+
+  } catch (error: any) {
+    console.error('❌ Create kost error:', error);
+    return NextResponse.json(
+      { message: 'Terjadi kesalahan server', error: error.message },
       { status: 500 }
     );
   }

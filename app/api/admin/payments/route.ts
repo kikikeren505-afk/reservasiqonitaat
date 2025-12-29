@@ -1,87 +1,192 @@
-// Lokasi: app/api/admin/payments/route.ts
-// ✅ FIX: Ganti u.name menjadi u.nama_lengkap
-
+// app/api/admin/payments/route.ts - FIXED VERSION
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
-// GET - Ambil semua pembayaran dari database
+// Force dynamic untuk disable caching
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
-    console.log('GET /api/admin/payments');
+    console.log('🔍 Fetching all payments for admin...');
 
-    // Query pembayaran dengan JOIN ke tabel reservasi, users, dan kost
-    const payments: any = await query(
-      `SELECT 
-        p.id,
-        p.reservasi_id,
-        p.metode_pembayaran,
-        p.nama_pengirim,
-        p.nama_rekening,
-        p.tanggal_transfer,
-        p.bukti_transfer,
-        p.status,
-        p.catatan_admin,
-        p.verified_by,
-        p.verified_at,
-        p.created_at,
-        p.updated_at,
-        r.user_id,
-        r.kost_id,
-        r.durasi_bulan,
-        r.total_harga,
-        r.tanggal_mulai,
-        u.nama_lengkap as user_name,
-        u.email as user_email,
-        k.nama as kost_name
-      FROM pembayaran p
-      LEFT JOIN reservasi r ON p.reservasi_id = r.id
-      LEFT JOIN users u ON r.user_id = u.id
-      LEFT JOIN kost k ON r.kost_id = k.id
-      ORDER BY p.created_at DESC`
-    );
+    // Query untuk mengambil semua pembayaran dengan data lengkap
+    const { data: payments, error } = await supabase
+      .from('pembayaran')
+      .select(`
+        *,
+        reservasi (
+          id,
+          user_id,
+          durasi_bulan,
+          tanggal_mulai,
+          tanggal_selesai,
+          kost_id,
+          kost:kost_id (
+            id,
+            nama,
+            alamat
+          ),
+          users:user_id (
+            id,
+            email
+          )
+        )
+      `)
+      .order('created_at', { ascending: false });
 
-    console.log('Payments found:', payments?.length || 0);
-
-    // Handle empty array
-    if (!payments || payments.length === 0) {
-      console.log('No payments found, returning empty array');
-      return NextResponse.json([], { status: 200 });
+    if (error) {
+      console.error('❌ Supabase error:', error);
+      throw error;
     }
 
-    // Format data untuk frontend
-    const formattedPayments = payments.map((p: any) => ({
-      id: p.id?.toString() || '0',
-      userId: p.user_id?.toString() || 'N/A',
-      userName: p.user_name || 'Unknown',
-      userEmail: p.user_email || '',
-      kostName: p.kost_name || 'Unknown',
-      amount: p.total_harga || 0,
-      paymentMethod: p.metode_pembayaran === 'transfer' ? `Transfer Bank - ${p.nama_rekening || ''}` : 'Cash',
-      status: p.status || 'pending',
-      buktiTransfer: p.bukti_transfer || null,
-      namaPengirim: p.nama_pengirim || '',
-      namaRekening: p.nama_rekening || '',
-      tanggalTransfer: p.tanggal_transfer || null,
-      bookingDate: p.tanggal_mulai || p.created_at,
-      createdAt: p.created_at,
-      duration: p.durasi_bulan || 0,
-      catatanAdmin: p.catatan_admin || null,
-      verifiedBy: p.verified_by || null,
-      verifiedAt: p.verified_at || null,
-      reservasiId: p.reservasi_id
-    }));
+    console.log(`✅ Found ${payments?.length || 0} payments`);
 
-    console.log('✅ Formatted payments:', formattedPayments.length);
-    return NextResponse.json(formattedPayments, { status: 200 });
+    // Format data
+    const formattedData = payments?.map((p: any) => ({
+      id: p.id,
+      reservasi_id: p.reservasi_id,
+      jumlah: p.jumlah,
+      metode_pembayaran: p.metode_pembayaran,
+      status: p.status,
+      bukti_pembayaran: p.bukti_pembayaran,
+      nama_pengirim: p.nama_pengirim,
+      nama_rekening: p.nama_rekening,
+      tanggal_transfer: p.tanggal_transfer,
+      keterangan: p.keterangan,
+      created_at: p.created_at,
+      updated_at: p.updated_at,
+      // Data dari JOIN - gunakan nama_pengirim sebagai fallback
+      user_nama: p.nama_pengirim || p.reservasi?.users?.email || 'N/A',
+      user_email: p.reservasi?.users?.email,
+      user_hp: null, // Tidak ada di query untuk sementara
+      kost_nama: p.reservasi?.kost?.nama || 'N/A',
+      kost_alamat: p.reservasi?.kost?.alamat,
+      reservasi_durasi: p.reservasi?.durasi_bulan,
+      tanggal_mulai: p.reservasi?.tanggal_mulai,
+      tanggal_selesai: p.reservasi?.tanggal_selesai
+    })) || [];
 
+    console.log('📦 Formatted data sample:', formattedData[0]);
+
+    return NextResponse.json({
+      success: true,
+      data: formattedData,
+      count: formattedData.length
+    });
   } catch (error: any) {
     console.error('❌ Error fetching payments:', error);
-    return NextResponse.json(
-      { 
-        error: 'Failed to fetch payments',
-        message: error.message 
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      success: false,
+      message: 'Gagal mengambil data pembayaran',
+      error: error.message
+    }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { payment_id, status, keterangan } = body;
+
+    console.log('🔄 Updating payment:', { payment_id, status, keterangan });
+
+    // Validasi
+    if (!payment_id || !status) {
+      return NextResponse.json({
+        success: false,
+        message: 'Payment ID dan status diperlukan'
+      }, { status: 400 });
+    }
+
+    // Validasi status value
+    if (!['pending', 'verified', 'rejected'].includes(status)) {
+      return NextResponse.json({
+        success: false,
+        message: 'Status tidak valid. Harus: pending, verified, atau rejected'
+      }, { status: 400 });
+    }
+
+    // Get payment data terlebih dahulu
+    const { data: paymentData, error: fetchError } = await supabase
+      .from('pembayaran')
+      .select('reservasi_id')
+      .eq('id', payment_id)
+      .single();
+
+    if (fetchError) {
+      console.error('❌ Error fetching payment:', fetchError);
+      throw new Error('Pembayaran tidak ditemukan');
+    }
+
+    console.log('📦 Payment data:', paymentData);
+
+    // Update status pembayaran
+    const { error: updateError } = await supabase
+      .from('pembayaran')
+      .update({ 
+        status, 
+        keterangan: keterangan || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', payment_id);
+
+    if (updateError) {
+      console.error('❌ Error updating payment:', updateError);
+      throw updateError;
+    }
+
+    console.log('✅ Payment status updated');
+
+    // Jika verified, update juga status reservasi menjadi 'confirmed'
+    if (status === 'verified' && paymentData?.reservasi_id) {
+      console.log('🔄 Updating reservasi status to confirmed...');
+      
+      const { error: reservasiUpdateError } = await supabase
+        .from('reservasi')
+        .update({ 
+          status: 'confirmed',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', paymentData.reservasi_id);
+
+      if (reservasiUpdateError) {
+        console.error('⚠️ Error updating reservasi (non-blocking):', reservasiUpdateError);
+      } else {
+        console.log('✅ Reservasi status updated to confirmed');
+      }
+    }
+
+    // Jika rejected, bisa set reservasi status kembali ke pending
+    if (status === 'rejected' && paymentData?.reservasi_id) {
+      console.log('🔄 Updating reservasi status to pending...');
+      
+      const { error: reservasiUpdateError } = await supabase
+        .from('reservasi')
+        .update({ 
+          status: 'pending',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', paymentData.reservasi_id);
+
+      if (reservasiUpdateError) {
+        console.error('⚠️ Error updating reservasi (non-blocking):', reservasiUpdateError);
+      } else {
+        console.log('✅ Reservasi status updated to pending');
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: status === 'verified' 
+        ? 'Pembayaran berhasil diverifikasi' 
+        : 'Pembayaran berhasil ditolak'
+    });
+  } catch (error: any) {
+    console.error('❌ Error updating payment:', error);
+    return NextResponse.json({
+      success: false,
+      message: 'Gagal mengupdate pembayaran',
+      error: error.message
+    }, { status: 500 });
   }
 }

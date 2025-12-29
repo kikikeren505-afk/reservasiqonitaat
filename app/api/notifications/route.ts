@@ -1,54 +1,66 @@
 // Lokasi: app/api/notifications/route.ts
-// ✅ FIX: Sesuaikan dengan struktur database yang benar
 
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 export async function GET() {
   try {
     console.log('GET /api/notifications');
 
     // Query reservasi baru yang belum dikonfirmasi
-    const reservations: any = await query(
-      `SELECT 
-        r.id, 
-        r.user_id, 
-        r.kost_id, 
-        r.tanggal_mulai, 
-        r.status, 
-        r.created_at,
-        u.nama_lengkap as customer_name,
-        k.nama as kost_name
-       FROM reservasi r
-       LEFT JOIN users u ON r.user_id = u.id
-       LEFT JOIN kost k ON r.kost_id = k.id
-       WHERE r.status = 'pending' 
-       ORDER BY r.created_at DESC 
-       LIMIT 10`
-    );
+    const { data: reservations, error: reservationsError } = await supabase
+      .from('reservasi')
+      .select(`
+        id,
+        user_id,
+        kost_id,
+        tanggal_mulai,
+        status,
+        created_at,
+        users:user_id (
+          nama_lengkap
+        ),
+        kost:kost_id (
+          nama
+        )
+      `)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (reservationsError) {
+      console.error('❌ Error fetching reservations:', reservationsError);
+    }
 
     // Query pembayaran baru yang belum dikonfirmasi
-    const payments: any = await query(
-      `SELECT 
-        p.id, 
-        p.reservasi_id, 
-        p.status, 
-        p.created_at,
-        r.total_harga as amount,
-        r.user_id,
-        u.nama_lengkap as customer_name,
-        k.nama as kost_name
-       FROM pembayaran p
-       LEFT JOIN reservasi r ON p.reservasi_id = r.id
-       LEFT JOIN users u ON r.user_id = u.id
-       LEFT JOIN kost k ON r.kost_id = k.id
-       WHERE p.status = 'pending' 
-       ORDER BY p.created_at DESC 
-       LIMIT 10`
-    );
+    const { data: payments, error: paymentsError } = await supabase
+      .from('pembayaran')
+      .select(`
+        id,
+        reservasi_id,
+        status,
+        created_at,
+        reservasi:reservasi_id (
+          total_harga,
+          user_id,
+          users:user_id (
+            nama_lengkap
+          ),
+          kost:kost_id (
+            nama
+          )
+        )
+      `)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(10);
 
-    console.log('Reservations found:', reservations?.length || 0);
-    console.log('Payments found:', payments?.length || 0);
+    if (paymentsError) {
+      console.error('❌ Error fetching payments:', paymentsError);
+    }
+
+    console.log('✅ Reservations found:', reservations?.length || 0);
+    console.log('✅ Payments found:', payments?.length || 0);
 
     // Format notifikasi
     const notifications = [
@@ -57,8 +69,8 @@ export async function GET() {
         id: `res-${r.id}`,
         type: 'reservation' as const,
         title: 'Reservasi Baru',
-        message: `${r.customer_name || 'User'} booking ${r.kost_name || 'kost'} untuk tanggal ${new Date(r.tanggal_mulai).toLocaleDateString('id-ID')}`,
-        customerName: r.customer_name || 'Unknown',
+        message: `${r.users?.nama_lengkap || 'User'} booking ${r.kost?.nama || 'kost'} untuk tanggal ${new Date(r.tanggal_mulai).toLocaleDateString('id-ID')}`,
+        customerName: r.users?.nama_lengkap || 'Unknown',
         timestamp: r.created_at,
         link: `/admin/reservasi`,
       })),
@@ -67,9 +79,9 @@ export async function GET() {
         id: `pay-${p.id}`,
         type: 'payment' as const,
         title: 'Pembayaran Baru',
-        message: `${p.customer_name || 'User'} mengirim bukti transfer untuk ${p.kost_name || 'kost'}`,
-        customerName: p.customer_name || 'Unknown',
-        amount: p.amount,
+        message: `${p.reservasi?.users?.nama_lengkap || 'User'} mengirim bukti transfer untuk ${p.reservasi?.kost?.nama || 'kost'}`,
+        customerName: p.reservasi?.users?.nama_lengkap || 'Unknown',
+        amount: p.reservasi?.total_harga,
         timestamp: p.created_at,
         link: `/admin/payments`,
       }))

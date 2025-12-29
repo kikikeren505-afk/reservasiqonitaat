@@ -1,0 +1,73 @@
+import { Pool } from 'pg';
+
+if (!process.env.DATABASE_URL) {
+  throw new Error('❌ DATABASE_URL tidak ditemukan!');
+}
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { 
+    rejectUnauthorized: false 
+  },
+  max: 10, // Kurangi dari 20 ke 10 untuk avoid timeout
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 60000, // Naikkan dari 10000 ke 60000 (60 detik)
+  query_timeout: 30000, // Timeout per query 30 detik
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000
+});
+
+console.log('✅ PostgreSQL pool created successfully');
+console.log('📍 Connecting to Supabase PostgreSQL');
+console.log('🔗 Host:', process.env.DATABASE_URL?.split('@')[1]?.split('/')[0] || 'unknown');
+
+pool.on('connect', () => {
+  console.log('✅ Database connected successfully');
+});
+
+pool.on('error', (err) => {
+  console.error('❌ Database pool error:', err.message);
+});
+
+pool.on('remove', () => {
+  console.log('ℹ️ Client removed from pool');
+});
+
+export const query = async (sql: string, params?: any): Promise<any> => {
+  const startTime = Date.now();
+  try {
+    console.log('🔍 Executing query...');
+    const result = await pool.query(sql, params);
+    const duration = Date.now() - startTime;
+    console.log(`✅ Query executed in ${duration}ms`);
+    return result;
+  } catch (error: any) {
+    const duration = Date.now() - startTime;
+    console.error(`❌ Query error after ${duration}ms:`, error.message);
+    console.error('   SQL:', sql);
+    console.error('   Params:', params);
+    throw error;
+  }
+};
+
+export const queryOne = async (sql: string, params?: any): Promise<any> => {
+  try {
+    const result = await pool.query(sql, params);
+    return result.rows[0] ?? null;
+  } catch (error: any) {
+    console.error('❌ QueryOne error:', error.message);
+    throw error;
+  }
+};
+
+export const execute = async (sql: string, params?: any): Promise<any> => {
+  try {
+    const result = await pool.query(sql, params);
+    return result.rowCount ?? 0;
+  } catch (error: any) {
+    console.error('❌ Execute error:', error.message);
+    throw error;
+  }
+};
+
+export default pool;

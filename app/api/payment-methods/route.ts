@@ -1,20 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 // GET - Ambil semua metode pembayaran aktif
 export async function GET(request: NextRequest) {
   try {
-    const methods = await db.query(
-      `SELECT * FROM payment_methods 
-       WHERE is_active = TRUE 
-       ORDER BY type, id`
-    );
+    const { data: methods, error } = await supabase
+      .from('payment_methods')
+      .select('*')
+      .eq('is_active', true)
+      .order('type')
+      .order('id');
 
-    return NextResponse.json({ data: methods });
-  } catch (error) {
-    console.error('Error fetching payment methods:', error);
+    if (error) {
+      console.error('❌ Supabase error:', error);
+      throw new Error(error.message);
+    }
+
+    return NextResponse.json({ data: methods || [] });
+  } catch (error: any) {
+    console.error('❌ Error fetching payment methods:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch payment methods' },
+      { error: 'Failed to fetch payment methods', message: error.message },
       { status: 500 }
     );
   }

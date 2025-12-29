@@ -1,8 +1,5 @@
-// Lokasi: app/api/users/[id]/route.ts
-// ✅ DIPERBAIKI: Ganti semua placeholder MySQL (?) ke PostgreSQL ($1, $2, dst)
-
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 // GET user by ID
 export async function GET(
@@ -19,29 +16,32 @@ export async function GET(
       );
     }
 
-    // DIPERBAIKI: Ganti ? ke $1
-    const users: any = await query(
-      'SELECT id, nama_lengkap, nomor_hp, alamat, email, role FROM users WHERE id = $1',
-      [userId]
-    );
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, nama_lengkap, nomor_hp, alamat, email, role')
+      .eq('id', userId)
+      .single();
 
-    if (!users || users.length === 0) {
+    if (error || !user) {
+      console.error('❌ Supabase error:', error);
       return NextResponse.json(
         { success: false, message: 'User tidak ditemukan' },
         { status: 404 }
       );
     }
 
+    console.log('✅ User found:', user.id);
+
     return NextResponse.json(
       {
         success: true,
-        data: users[0],
+        data: user,
       },
       { status: 200 }
     );
 
   } catch (error: any) {
-    console.error('Error fetching user:', error);
+    console.error('❌ Error fetching user:', error);
     return NextResponse.json(
       {
         success: false,
@@ -81,43 +81,39 @@ export async function PUT(
       );
     }
 
-    // DIPERBAIKI: Ganti ? ke $1, $2, $3, $4 + gunakan RETURNING
     // Update user data
-    const result: any = await query(
-      `UPDATE users 
-       SET nama_lengkap = $1, nomor_hp = $2, alamat = $3
-       WHERE id = $4
-       RETURNING id`,
-      [nama_lengkap, nomor_hp, alamat, userId]
-    );
+    const { data: updatedUser, error } = await supabase
+      .from('users')
+      .update({
+        nama_lengkap,
+        nomor_hp,
+        alamat
+      })
+      .eq('id', userId)
+      .select('id, nama_lengkap, nomor_hp, alamat, email, role')
+      .single();
 
-    if (!result || result.length === 0) {
+    if (error || !updatedUser) {
+      console.error('❌ Supabase error:', error);
       return NextResponse.json(
         { success: false, message: 'User tidak ditemukan atau tidak ada perubahan' },
         { status: 404 }
       );
     }
 
-    // DIPERBAIKI: Ganti ? ke $1
-    // Get updated user data
-    const updatedUsers: any = await query(
-      'SELECT id, nama_lengkap, nomor_hp, alamat, email, role FROM users WHERE id = $1',
-      [userId]
-    );
-
-    console.log('User updated successfully:', updatedUsers[0]);
+    console.log('✅ User updated successfully:', updatedUser);
 
     return NextResponse.json(
       {
         success: true,
         message: 'Profil berhasil diperbarui',
-        data: updatedUsers[0],
+        data: updatedUser,
       },
       { status: 200 }
     );
 
   } catch (error: any) {
-    console.error('Error updating user:', error);
+    console.error('❌ Error updating user:', error);
     return NextResponse.json(
       {
         success: false,

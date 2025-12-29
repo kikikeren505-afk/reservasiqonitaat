@@ -1,8 +1,5 @@
-// Lokasi: app/api/payments/submit/route.ts
-// ✅ DIPERBAIKI: Ganti semua placeholder MySQL (?) ke PostgreSQL ($1, $2, dst)
-
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 
@@ -52,9 +49,9 @@ export async function POST(req: Request) {
 
         // Save path relatif untuk database
         buktiPath = `/uploads/bukti-transfer/${fileName}`;
-        console.log('Bukti transfer saved:', buktiPath);
+        console.log('✅ Bukti transfer saved:', buktiPath);
       } catch (uploadError) {
-        console.error('Error uploading file:', uploadError);
+        console.error('❌ Error uploading file:', uploadError);
         return NextResponse.json(
           { success: false, error: 'Gagal upload bukti transfer' },
           { status: 500 }
@@ -62,63 +59,80 @@ export async function POST(req: Request) {
       }
     }
 
-    // DIPERBAIKI: Ganti ? ke $1
-    // Cek apakah sudah ada pembayaran untuk reservasi ini
-    const existingPayment: any = await query(
-      'SELECT id FROM pembayaran WHERE reservasi_id = $1',
-      [reservasiId]
-    );
+    // ✅ Cek apakah sudah ada pembayaran untuk reservasi ini
+    const { data: existingPayment, error: checkError } = await supabase
+      .from('pembayaran')
+      .select('id')
+      .eq('reservasi_id', reservasiId)
+      .maybeSingle();
 
-    if (existingPayment.length > 0) {
-      // DIPERBAIKI: Ganti ? ke $1, $2, $3, dst + NOW() ke CURRENT_TIMESTAMP
-      // Update pembayaran yang sudah ada
-      await query(
-        `UPDATE pembayaran 
-         SET metode_pembayaran = $1,
-             nama_pengirim = $2,
-             nama_rekening = $3,
-             tanggal_transfer = $4,
-             bukti_transfer = $5,
-             status = 'pending',
-             updated_at = CURRENT_TIMESTAMP
-         WHERE reservasi_id = $6`,
-        [
-          metodePembayaran,
-          namaPengirim || null,
-          namaRekening || null,
-          tanggalTransfer || null,
-          buktiPath || null,
-          reservasiId,
-        ]
+    if (checkError) {
+      console.error('❌ Error checking existing payment:', checkError);
+      return NextResponse.json(
+        { success: false, error: 'Database error: ' + checkError.message },
+        { status: 500 }
       );
-      console.log('Payment updated for reservasi:', reservasiId);
-    } else {
-      // DIPERBAIKI: Ganti ? ke $1, $2, $3, dst + NOW() ke CURRENT_TIMESTAMP
-      // Insert pembayaran baru
-      await query(
-        `INSERT INTO pembayaran 
-         (reservasi_id, metode_pembayaran, nama_pengirim, nama_rekening, tanggal_transfer, bukti_transfer, status, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 'pending', CURRENT_TIMESTAMP)`,
-        [
-          reservasiId,
-          metodePembayaran,
-          namaPengirim || null,
-          namaRekening || null,
-          tanggalTransfer || null,
-          buktiPath || null,
-        ]
-      );
-      console.log('Payment created for reservasi:', reservasiId);
     }
 
-    // DIPERBAIKI: Ganti ? ke $1
-    // Update status pembayaran di tabel reservasi
-    await query(
-      `UPDATE reservasi 
-       SET status_pembayaran = 'pending'
-       WHERE id = $1`,
-      [reservasiId]
-    );
+    if (existingPayment) {
+      // ✅ Update pembayaran yang sudah ada
+      const { error: updateError } = await supabase
+        .from('pembayaran')
+        .update({
+          metode_pembayaran: metodePembayaran,
+          nama_pengirim: namaPengirim || null,
+          nama_rekening: namaRekening || null,
+          tanggal_transfer: tanggalTransfer || null,
+          bukti_transfer: buktiPath || null,
+          status: 'pending',
+          updated_at: new Date().toISOString()
+        })
+        .eq('reservasi_id', reservasiId);
+
+      if (updateError) {
+        console.error('❌ Error updating payment:', updateError);
+        return NextResponse.json(
+          { success: false, error: 'Gagal update pembayaran: ' + updateError.message },
+          { status: 500 }
+        );
+      }
+
+      console.log('✅ Payment updated for reservasi:', reservasiId);
+    } else {
+      // ✅ Insert pembayaran baru
+      const { error: insertError } = await supabase
+        .from('pembayaran')
+        .insert({
+          reservasi_id: reservasiId,
+          metode_pembayaran: metodePembayaran,
+          nama_pengirim: namaPengirim || null,
+          nama_rekening: namaRekening || null,
+          tanggal_transfer: tanggalTransfer || null,
+          bukti_transfer: buktiPath || null,
+          status: 'pending'
+        });
+
+      if (insertError) {
+        console.error('❌ Error inserting payment:', insertError);
+        return NextResponse.json(
+          { success: false, error: 'Gagal insert pembayaran: ' + insertError.message },
+          { status: 500 }
+        );
+      }
+
+      console.log('✅ Payment created for reservasi:', reservasiId);
+    }
+
+    // ✅ Update status pembayaran di tabel reservasi
+    const { error: updateReservasiError } = await supabase
+      .from('reservasi')
+      .update({ status_pembayaran: 'pending' })
+      .eq('id', reservasiId);
+
+    if (updateReservasiError) {
+      console.error('❌ Error updating reservasi status:', updateReservasiError);
+      // Tidak return error karena pembayaran sudah tersimpan
+    }
 
     return NextResponse.json(
       {
@@ -134,7 +148,7 @@ export async function POST(req: Request) {
     );
 
   } catch (error: any) {
-    console.error('Error submitting payment:', error);
+    console.error('❌ Error submitting payment:', error);
     return NextResponse.json(
       {
         success: false,
@@ -146,7 +160,7 @@ export async function POST(req: Request) {
   }
 }
 
-// API untuk mendapatkan detail pembayaran
+// ✅ API untuk mendapatkan detail pembayaran
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -159,29 +173,42 @@ export async function GET(req: Request) {
       );
     }
 
-    // DIPERBAIKI: Ganti ? ke $1
-    const paymentResult: any = await query(
-      `SELECT * FROM pembayaran WHERE reservasi_id = $1`,
-      [reservasiId]
-    );
+    console.log('🔍 Fetching payment for reservasi:', reservasiId);
 
-    if (paymentResult.length === 0) {
+    // ✅ Query dengan Supabase
+    const { data: payment, error } = await supabase
+      .from('pembayaran')
+      .select('*')
+      .eq('reservasi_id', reservasiId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('❌ Supabase error:', error);
+      return NextResponse.json(
+        { success: false, error: 'Database error: ' + error.message },
+        { status: 500 }
+      );
+    }
+
+    if (!payment) {
       return NextResponse.json(
         { success: false, error: 'Pembayaran tidak ditemukan' },
         { status: 404 }
       );
     }
 
+    console.log('✅ Payment found');
+
     return NextResponse.json(
       {
         success: true,
-        data: paymentResult[0],
+        data: payment,
       },
       { status: 200 }
     );
 
   } catch (error: any) {
-    console.error('Error fetching payment:', error);
+    console.error('❌ Error fetching payment:', error);
     return NextResponse.json(
       {
         success: false,

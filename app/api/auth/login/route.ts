@@ -1,7 +1,5 @@
-// Lokasi: app/api/auth/login/route.ts
-
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import bcrypt from 'bcryptjs';
 
 export async function POST(req: Request) {
@@ -9,9 +7,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { email, password } = body;
 
-    console.log('Login attempt for email:', email);
+    console.log('🔐 Login attempt for email:', email);
 
-    // Validasi input
     if (!email || !password) {
       return NextResponse.json(
         { success: false, message: 'Email dan password harus diisi' },
@@ -19,13 +16,25 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ POSTGRES PLACEHOLDER ($1)
-    const users: any[] = await query(
-      'SELECT * FROM users WHERE email = $1 LIMIT 1',
-      [email]
-    );
+    // ✅ Query dengan Supabase REST API
+    console.log('📊 Querying Supabase via REST API...');
+    
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .limit(1);
 
-    if (users.length === 0) {
+    if (error) {
+      console.error('❌ Supabase error:', error);
+      return NextResponse.json(
+        { success: false, message: 'Database error: ' + error.message },
+        { status: 500 }
+      );
+    }
+
+    if (!users || users.length === 0) {
+      console.log('❌ User not found');
       return NextResponse.json(
         { success: false, message: 'Email atau password salah' },
         { status: 401 }
@@ -33,6 +42,7 @@ export async function POST(req: Request) {
     }
 
     const user = users[0];
+    console.log('✅ User found:', user.email);
 
     // Verifikasi password
     let isPasswordValid = false;
@@ -40,18 +50,17 @@ export async function POST(req: Request) {
     if (user.password?.startsWith('$2')) {
       isPasswordValid = await bcrypt.compare(password, user.password);
     } else {
-      // fallback (testing only)
       isPasswordValid = password === user.password;
     }
 
     if (!isPasswordValid) {
+      console.log('❌ Invalid password');
       return NextResponse.json(
         { success: false, message: 'Email atau password salah' },
         { status: 401 }
       );
     }
 
-    // Response TANPA password
     const userData = {
       id: user.id,
       email: user.email,
@@ -62,7 +71,7 @@ export async function POST(req: Request) {
       level_name: user.role === 'admin' ? 'Administrator' : 'User',
     };
 
-    console.log('Login success:', user.email);
+    console.log('✅ Login success:', user.email);
 
     return NextResponse.json({
       success: true,
@@ -72,11 +81,11 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error('❌ Login error:', error);
-
     return NextResponse.json(
       {
         success: false,
         message: 'Terjadi kesalahan server',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
       },
       { status: 500 }
     );

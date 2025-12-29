@@ -1,8 +1,7 @@
 // Lokasi: app/api/reservasi/user/[userId]/route.ts
-// ✅ DIPERBAIKI: Ganti placeholder MySQL (?) ke PostgreSQL ($1)
 
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 // ✅ Tambahkan ini untuk fix dynamic server error
 export const dynamic = 'force-dynamic';
@@ -23,39 +22,43 @@ export async function GET(
       );
     }
 
-    // DIPERBAIKI: Ganti ? ke $1
-    // Query reservasi user beserta detail kost (FIXED - sesuai struktur table)
-    const reservasiResult: any = await query(
-      `SELECT 
-        r.id,
-        r.user_id,
-        r.kost_id,
-        r.tanggal_mulai,
-        r.tanggal_selesai,
-        r.durasi_bulan,
-        r.total_harga,
-        r.status,
-        r.status_pembayaran,
-        r.catatan,
-        r.created_at,
-        k.nama AS nama_kost,
-        k.alamat,
-        k.harga,
-        k.deskripsi,
-        k.fasilitas,
-        k.status AS status_kost,
-        k.gambar
-       FROM reservasi r
-       LEFT JOIN kost k ON r.kost_id = k.id
-       WHERE r.user_id = $1
-       ORDER BY r.created_at DESC`,
-      [userId]
-    );
+    // Query reservasi user beserta detail kost
+    const { data: reservasiResult, error } = await supabase
+      .from('reservasi')
+      .select(`
+        id,
+        user_id,
+        kost_id,
+        tanggal_mulai,
+        tanggal_selesai,
+        durasi_bulan,
+        total_harga,
+        status,
+        status_pembayaran,
+        catatan,
+        created_at,
+        kost:kost_id (
+          nama,
+          alamat,
+          harga,
+          deskripsi,
+          fasilitas,
+          status,
+          gambar
+        )
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
 
-    console.log('Reservasi found:', reservasiResult.length);
+    if (error) {
+      console.error('❌ Supabase error:', error);
+      throw new Error(error.message);
+    }
+
+    console.log('✅ Reservasi found:', reservasiResult?.length || 0);
 
     // Format data untuk response
-    const formattedData = reservasiResult.map((item: any) => ({
+    const formattedData = reservasiResult?.map((item: any) => ({
       id: item.id,
       reservasi_id: item.id,
       user_id: item.user_id,
@@ -69,15 +72,15 @@ export async function GET(
       catatan: item.catatan,
       created_at: item.created_at,
       // Detail kost
-      nama_kost: item.nama_kost,
-      alamat_kost: item.alamat,
-      kelas_kamar: item.nama_kost, // Pakai nama_kost karena tidak ada kolom kelas
-      harga: item.harga, // Ini sudah benar
-      deskripsi: item.deskripsi,
-      fasilitas: item.fasilitas,
-      status_kost: item.status_kost,
-      gambar_kost: item.gambar,
-    }));
+      nama_kost: item.kost?.nama || null,
+      alamat_kost: item.kost?.alamat || null,
+      kelas_kamar: item.kost?.nama || null,
+      harga: item.kost?.harga || null,
+      deskripsi: item.kost?.deskripsi || null,
+      fasilitas: item.kost?.fasilitas || null,
+      status_kost: item.kost?.status || null,
+      gambar_kost: item.kost?.gambar || null,
+    })) || [];
 
     return NextResponse.json(
       {
@@ -89,7 +92,7 @@ export async function GET(
     );
 
   } catch (error: any) {
-    console.error('Error fetching reservasi:', error);
+    console.error('❌ Error fetching reservasi:', error);
     return NextResponse.json(
       {
         success: false,

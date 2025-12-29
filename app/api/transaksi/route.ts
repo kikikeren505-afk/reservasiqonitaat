@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query, queryOne } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 // GET user transactions
 export async function GET(request: NextRequest) {
@@ -14,29 +14,47 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const transaksi: any = await query(
-      `SELECT t.*, k.Harga, k.Ukuran_kamar, k.Fasilitas,
-              dk.Nama_kost, dk.Alamat_kost
-       FROM Transaksi t
-       LEFT JOIN Kategori k ON t.Kamar_id = k.Kategori_id
-       LEFT JOIN Data_Kost dk ON k.Kost_id = dk.Kost_id
-       WHERE t.User_id = ?
-       ORDER BY t.Tanggal_mulai DESC`,
-      [userId]
-    );
+    // Query transaksi/reservasi dengan JOIN ke kost
+    const { data: transaksi, error } = await supabase
+      .from('reservasi')
+      .select(`
+        *,
+        kost:kost_id (
+          nama,
+          alamat,
+          harga,
+          fasilitas
+        )
+      `)
+      .eq('user_id', userId)
+      .order('tanggal_mulai', { ascending: false });
+
+    if (error) {
+      console.error('❌ Supabase error:', error);
+      throw new Error(error.message);
+    }
+
+    // Transform data untuk match format lama
+    const transformedData = transaksi?.map((item: any) => ({
+      ...item,
+      Nama_kost: item.kost?.nama,
+      Alamat_kost: item.kost?.alamat,
+      Harga: item.kost?.harga,
+      Fasilitas: item.kost?.fasilitas,
+    })) || [];
 
     return NextResponse.json(
       {
         message: 'Data transaksi berhasil diambil',
-        data: transaksi
+        data: transformedData
       },
       { status: 200 }
     );
 
-  } catch (error) {
-    console.error('Get transaksi error:', error);
+  } catch (error: any) {
+    console.error('❌ Get transaksi error:', error);
     return NextResponse.json(
-      { message: 'Terjadi kesalahan server' },
+      { message: 'Terjadi kesalahan server', error: error.message },
       { status: 500 }
     );
   }
@@ -46,66 +64,76 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { user_id, kamar_id, tanggal_mulai, status } = body;
+    const { user_id, kost_id, tanggal_mulai, durasi_bulan, total_harga, status } = body;
 
     // Validation
-    if (!user_id || !kamar_id || !tanggal_mulai) {
+    if (!user_id || !kost_id || !tanggal_mulai) {
       return NextResponse.json(
         { message: 'Data tidak lengkap' },
         { status: 400 }
       );
     }
 
-    // Check if room is available
-    const kategori: any = await queryOne(
-      'SELECT * FROM Kategori WHERE Kategori_id = ?',
-      [kamar_id]
-    );
+    // Check if kost exists
+    const { data: kost, error: kostError } = await supabase
+      .from('kost')
+      .select('*')
+      .eq('id', kost_id)
+      .single();
 
-    if (!kategori) {
+    if (kostError || !kost) {
       return NextResponse.json(
-        { message: 'Kamar tidak ditemukan' },
+        { message: 'Kost tidak ditemukan' },
         { status: 404 }
       );
     }
 
     // Check existing active reservations
-    const existingReservation = await queryOne(
-      `SELECT * FROM Transaksi 
-       WHERE Kamar_id = ? AND Status IN ('pending', 'aktif')`,
-      [kamar_id]
-    );
+    const { data: existingReservation } = await supabase
+      .from('reservasi')
+      .select('*')
+      .eq('kost_id', kost_id)
+      .in('status', ['pending', 'confirmed'])
+      .single();
 
     if (existingReservation) {
       return NextResponse.json(
-        { message: 'Kamar sudah dipesan' },
+        { message: 'Kost sudah dipesan' },
         { status: 409 }
       );
     }
 
-    // Create transaction
-    const result: any = await query(
-      `INSERT INTO Transaksi (User_id, Kamar_id, Tanggal_mulai, Status) 
-       VALUES (?, ?, ?, ?)`,
-      [user_id, kamar_id, tanggal_mulai, status || 'pending']
-    );
+    // Create transaction/reservasi
+    const { data: newReservasi, error } = await supabase
+      .from('reservasi')
+      .insert({
+        user_id,
+        kost_id,
+        tanggal_mulai,
+        durasi_bulan: durasi_bulan || 1,
+        total_harga: total_harga || kost.harga,
+        status: status || 'pending'
+      })
+      .select()
+      .single();
 
-    if (result.insertId) {
-      return NextResponse.json(
-        {
-          message: 'Reservasi berhasil dibuat',
-          transaksi_id: result.insertId
-        },
-        { status: 201 }
-      );
-    } else {
-      throw new Error('Failed to create transaction');
+    if (error) {
+      console.error('❌ Supabase error:', error);
+      throw new Error(error.message);
     }
 
-  } catch (error) {
-    console.error('Create transaksi error:', error);
     return NextResponse.json(
-      { message: 'Terjadi kesalahan server' },
+      {
+        message: 'Reservasi berhasil dibuat',
+        transaksi_id: newReservasi.id
+      },
+      { status: 201 }
+    );
+
+  } catch (error: any) {
+    console.error('❌ Create transaksi error:', error);
+    return NextResponse.json(
+      { message: 'Terjadi kesalahan server', error: error.message },
       { status: 500 }
     );
   }
@@ -124,20 +152,25 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    await query(
-      'UPDATE Transaksi SET Status = ? WHERE Transaksi_id = ?',
-      [status, transaksi_id]
-    );
+    const { error } = await supabase
+      .from('reservasi')
+      .update({ status })
+      .eq('id', transaksi_id);
+
+    if (error) {
+      console.error('❌ Supabase error:', error);
+      throw new Error(error.message);
+    }
 
     return NextResponse.json(
       { message: 'Status transaksi berhasil diupdate' },
       { status: 200 }
     );
 
-  } catch (error) {
-    console.error('Update transaksi error:', error);
+  } catch (error: any) {
+    console.error('❌ Update transaksi error:', error);
     return NextResponse.json(
-      { message: 'Terjadi kesalahan server' },
+      { message: 'Terjadi kesalahan server', error: error.message },
       { status: 500 }
     );
   }

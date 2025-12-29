@@ -1,102 +1,97 @@
-import { NextResponse } from 'next/server';
+// app/api/payments/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase';
 
-// Data dummy untuk testing - ganti dengan database sebenarnya
-const dummyPayments = [
-  {
-    id: 'PAY001',
-    reservasiId: 'RES001',
-    namaKost: 'Kost Qonitaat A',
-    namaPenyewa: 'M. Rizky Ramadhan',
-    jumlah: 1500000,
-    metodePembayaran: 'Transfer Bank BCA',
-    status: 'success',
-    tanggalPembayaran: '2025-01-10T10:30:00',
-    buktiPembayaran: '/uploads/bukti-001.jpg'
-  },
-  {
-    id: 'PAY002',
-    reservasiId: 'RES002',
-    namaKost: 'Kost Qonitaat B',
-    namaPenyewa: 'Ahmad Fauzi',
-    jumlah: 1200000,
-    metodePembayaran: 'Transfer Bank Mandiri',
-    status: 'pending',
-    tanggalPembayaran: '2025-01-15T14:20:00',
-    buktiPembayaran: '/uploads/bukti-002.jpg'
-  },
-  {
-    id: 'PAY003',
-    reservasiId: 'RES003',
-    namaKost: 'Kost Qonitaat C',
-    namaPenyewa: 'Siti Nurhaliza',
-    jumlah: 1800000,
-    metodePembayaran: 'E-Wallet (GoPay)',
-    status: 'success',
-    tanggalPembayaran: '2025-01-12T09:15:00'
-  },
-  {
-    id: 'PAY004',
-    reservasiId: 'RES004',
-    namaKost: 'Kost Qonitaat D',
-    namaPenyewa: 'Budi Santoso',
-    jumlah: 1000000,
-    metodePembayaran: 'Transfer Bank BRI',
-    status: 'failed',
-    tanggalPembayaran: '2025-01-08T16:45:00'
-  }
-];
-
-export async function GET() {
+export async function POST(request: NextRequest) {
   try {
-    // Simulasi delay untuk fetching data
-    await new Promise(resolve => setTimeout(resolve, 500));
+    const body = await request.json();
+    const {
+      reservasi_id,
+      jumlah,
+      metode_pembayaran,
+      status,
+      bukti_pembayaran, // ini base64 string
+      nama_pengirim,
+      nama_rekening,
+      tanggal_transfer,
+      keterangan
+    } = body;
 
-    // TODO: Ganti dengan query database sebenarnya
-    // Contoh dengan Prisma:
-    // const payments = await prisma.payment.findMany({
-    //   include: {
-    //     reservasi: true,
-    //     user: true
-    //   },
-    //   orderBy: {
-    //     tanggalPembayaran: 'desc'
-    //   }
-    // });
+    // Validasi
+    if (!reservasi_id || !jumlah || !metode_pembayaran) {
+      return NextResponse.json({
+        success: false,
+        message: 'Data tidak lengkap'
+      }, { status: 400 });
+    }
 
-    return NextResponse.json(dummyPayments);
-  } catch (error) {
-    console.error('Error fetching payments:', error);
-    return NextResponse.json(
-      { error: 'Gagal mengambil data pembayaran' },
-      { status: 500 }
-    );
+    // Insert pembayaran (bukti_pembayaran disimpan sebagai base64 atau URL)
+    const { data, error } = await supabase
+      .from('pembayaran')
+      .insert({
+        reservasi_id,
+        jumlah,
+        metode_pembayaran,
+        status: status || 'pending',
+        bukti_pembayaran, // simpan base64 atau URL
+        nama_pengirim,
+        nama_rekening,
+        tanggal_transfer,
+        keterangan
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Supabase error:', error);
+      throw error;
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Pembayaran berhasil disimpan',
+      data: data
+    });
+  } catch (error: any) {
+    console.error('Error creating payment:', error);
+    return NextResponse.json({
+      success: false,
+      message: 'Gagal menyimpan pembayaran',
+      error: error.message
+    }, { status: 500 });
   }
 }
 
-export async function POST(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const body = await request.json();
+    const searchParams = request.nextUrl.searchParams;
+    const reservasi_id = searchParams.get('reservasi_id');
 
-    // TODO: Validasi data dan simpan ke database
-    // const newPayment = await prisma.payment.create({
-    //   data: {
-    //     reservasiId: body.reservasiId,
-    //     jumlah: body.jumlah,
-    //     metodePembayaran: body.metodePembayaran,
-    //     status: 'pending',
-    //     tanggalPembayaran: new Date()
-    //   }
-    // });
+    if (!reservasi_id) {
+      return NextResponse.json({
+        success: false,
+        message: 'Reservasi ID diperlukan'
+      }, { status: 400 });
+    }
 
-    return NextResponse.json(
-      { message: 'Pembayaran berhasil dibuat', data: body },
-      { status: 201 }
-    );
-  } catch (error) {
-    console.error('Error creating payment:', error);
-    return NextResponse.json(
-      { error: 'Gagal membuat pembayaran' },
-      { status: 500 }
-    );
+    const { data, error } = await supabase
+      .from('pembayaran')
+      .select('*')
+      .eq('reservasi_id', reservasi_id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    return NextResponse.json({
+      success: true,
+      data: data
+    });
+  } catch (error: any) {
+    console.error('Error fetching payments:', error);
+    return NextResponse.json({
+      success: false,
+      message: 'Gagal mengambil data pembayaran',
+      error: error.message
+    }, { status: 500 });
   }
 }

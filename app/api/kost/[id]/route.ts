@@ -1,22 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { queryOne } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const kost = await queryOne(
-      'SELECT * FROM Data_Kost WHERE Kost_id = ?',
-      [params.id]
-    );
+    console.log('GET /api/kost/' + params.id);
 
-    if (!kost) {
+    const { data: kost, error } = await supabase
+      .from('kost')
+      .select('*')
+      .eq('id', params.id)
+      .single();
+
+    if (error || !kost) {
+      console.error('❌ Supabase error:', error);
       return NextResponse.json(
         { message: 'Kost tidak ditemukan' },
         { status: 404 }
       );
     }
+
+    console.log('✅ Kost found:', kost.id);
 
     return NextResponse.json(
       {
@@ -26,10 +32,10 @@ export async function GET(
       { status: 200 }
     );
 
-  } catch (error) {
-    console.error('Get kost detail error:', error);
+  } catch (error: any) {
+    console.error('❌ Get kost detail error:', error);
     return NextResponse.json(
-      { message: 'Terjadi kesalahan server' },
+      { message: 'Terjadi kesalahan server', error: error.message },
       { status: 500 }
     );
   }

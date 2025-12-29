@@ -1,9 +1,8 @@
 // Lokasi: app/api/admin/kost/[id]/route.ts
-// ✅ DIPERBAIKI: Ganti semua placeholder MySQL (?) ke PostgreSQL ($1, $2, dst)
 
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
-import { query } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 // GET - Ambil detail kost by ID
 export async function GET(
@@ -14,29 +13,32 @@ export async function GET(
     const kostId = params.id;
     console.log('GET /api/admin/kost/' + kostId);
 
-    // DIPERBAIKI: Ganti ? ke $1
-    const kosts: any = await query(
-      'SELECT * FROM kost WHERE id = $1',
-      [kostId]
-    );
+    const { data: kost, error } = await supabase
+      .from('kost')
+      .select('*')
+      .eq('id', kostId)
+      .single();
 
-    if (!kosts || kosts.length === 0) {
+    if (error || !kost) {
+      console.error('❌ Supabase error:', error);
       return NextResponse.json(
         { success: false, message: 'Kost tidak ditemukan' },
         { status: 404 }
       );
     }
 
+    console.log('✅ Kost found:', kost.id);
+
     return NextResponse.json(
       {
         success: true,
-        data: kosts[0],
+        data: kost,
       },
       { status: 200 }
     );
 
   } catch (error: any) {
-    console.error('Error fetching kost:', error);
+    console.error('❌ Error fetching kost:', error);
     return NextResponse.json(
       {
         success: false,
@@ -68,21 +70,30 @@ export async function PUT(
       );
     }
 
-    // DIPERBAIKI: Ganti ? ke $1, $2, $3, dst + gunakan RETURNING untuk PostgreSQL
-    const result: any = await query(
-      `UPDATE kost 
-       SET nama = $1, alamat = $2, harga = $3, deskripsi = $4, fasilitas = $5, status = $6
-       WHERE id = $7
-       RETURNING id`,
-      [nama, alamat, harga, deskripsi, fasilitas, status, kostId]
-    );
+    // Update kost menggunakan Supabase
+    const { data: updatedKost, error } = await supabase
+      .from('kost')
+      .update({
+        nama,
+        alamat,
+        harga,
+        deskripsi,
+        fasilitas,
+        status
+      })
+      .eq('id', kostId)
+      .select()
+      .single();
 
-    if (!result || result.length === 0) {
+    if (error || !updatedKost) {
+      console.error('❌ Supabase error:', error);
       return NextResponse.json(
         { success: false, message: 'Kost tidak ditemukan' },
         { status: 404 }
       );
     }
+
+    console.log('✅ Kost updated:', updatedKost.id);
 
     // Clear cache untuk semua halaman yang menampilkan data kost
     revalidatePath('/admin/kost');
@@ -99,7 +110,7 @@ export async function PUT(
     );
 
   } catch (error: any) {
-    console.error('Error updating kost:', error);
+    console.error('❌ Error updating kost:', error);
     return NextResponse.json(
       {
         success: false,
@@ -120,15 +131,19 @@ export async function DELETE(
     const kostId = params.id;
     console.log('DELETE /api/admin/kost/' + kostId);
 
-    // DIPERBAIKI: Ganti ? ke $1
     // Check if kost has active reservations
-    const reservations: any = await query(
-      `SELECT COUNT(*) as count FROM reservasi 
-       WHERE kost_id = $1 AND status IN ('pending', 'confirmed')`,
-      [kostId]
-    );
+    const { count, error: countError } = await supabase
+      .from('reservasi')
+      .select('*', { count: 'exact', head: true })
+      .eq('kost_id', kostId)
+      .in('status', ['pending', 'confirmed']);
 
-    if (parseInt(reservations[0]?.count) > 0) {
+    if (countError) {
+      console.error('❌ Supabase error:', countError);
+      throw new Error(countError.message);
+    }
+
+    if (count && count > 0) {
       return NextResponse.json(
         { 
           success: false, 
@@ -138,19 +153,18 @@ export async function DELETE(
       );
     }
 
-    // DIPERBAIKI: Ganti ? ke $1 + gunakan RETURNING untuk PostgreSQL
     // Delete kost
-    const result: any = await query(
-      'DELETE FROM kost WHERE id = $1 RETURNING id',
-      [kostId]
-    );
+    const { error: deleteError } = await supabase
+      .from('kost')
+      .delete()
+      .eq('id', kostId);
 
-    if (!result || result.length === 0) {
-      return NextResponse.json(
-        { success: false, message: 'Kost tidak ditemukan' },
-        { status: 404 }
-      );
+    if (deleteError) {
+      console.error('❌ Supabase error:', deleteError);
+      throw new Error(deleteError.message);
     }
+
+    console.log('✅ Kost deleted:', kostId);
 
     // Clear cache setelah delete
     revalidatePath('/admin/kost');
@@ -166,7 +180,7 @@ export async function DELETE(
     );
 
   } catch (error: any) {
-    console.error('Error deleting kost:', error);
+    console.error('❌ Error deleting kost:', error);
     return NextResponse.json(
       {
         success: false,
