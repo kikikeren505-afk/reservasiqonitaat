@@ -1,29 +1,28 @@
-// Lokasi: app/api/reservasi/route.ts - FIXED VERSION
+// Lokasi: app/api/reservasi/route.ts - ADMIN VERSION
 
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 import { notifyAdminNewReservation } from '@/lib/whatsapp';
 
-// ✅ Tambahkan ini untuk fix dynamic server error
+// ✅ Gunakan Service Role Key untuk bypass RLS
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // Service role key
+);
+
+// ✅ Dynamic route
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('user_id');
+    const userId = searchParams.get('user_id'); // Optional filter
 
     console.log('GET /api/reservasi - user_id:', userId);
 
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, message: 'User ID diperlukan' },
-        { status: 400 }
-      );
-    }
-
-    // ✅ FIXED: Query reservasi dengan JOIN ke kost DAN pembayaran
-    const { data: reservasiData, error } = await supabase
+    // ✅ Query SEMUA reservasi (atau filter by user_id jika ada)
+    let query = supabaseAdmin
       .from('reservasi')
       .select(`
         id,
@@ -41,6 +40,10 @@ export async function GET(req: Request) {
           alamat,
           harga
         ),
+        users:user_id (
+          nama_lengkap,
+          email
+        ),
         pembayaran!pembayaran_reservasi_id_fkey (
           id,
           status,
@@ -50,17 +53,22 @@ export async function GET(req: Request) {
           created_at
         )
       `)
-      .eq('user_id', userId)
       .order('created_at', { ascending: false });
+
+    // ✅ Filter by user_id hanya jika parameter ada
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data: reservasiData, error } = await query;
 
     if (error) {
       console.error('❌ Supabase error:', error);
       throw new Error(error.message);
     }
 
-    // Transform data untuk match format lama
+    // Transform data
     const transformedData = reservasiData?.map((item: any) => {
-      // Sort pembayaran by created_at descending (terbaru dulu)
       const sortedPayments = item.pembayaran?.sort((a: any, b: any) => 
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       ) || [];
@@ -70,13 +78,13 @@ export async function GET(req: Request) {
         nama_kost: item.kost?.nama || null,
         alamat_kost: item.kost?.alamat || null,
         harga_kost: item.kost?.harga || null,
-        // ✅ Pembayaran sudah otomatis ada karena JOIN di atas, sorted by newest
+        nama_user: item.users?.nama_lengkap || null,
+        email_user: item.users?.email || null,
         pembayaran: sortedPayments
       };
     }) || [];
 
     console.log('✅ Reservasi ditemukan:', transformedData.length);
-    console.log('📦 Data dengan pembayaran:', JSON.stringify(transformedData, null, 2));
 
     return NextResponse.json(
       {
@@ -128,8 +136,8 @@ export async function POST(req: Request) {
     const tanggalMulaiFormatted = startDate.toISOString().split('T')[0];
     const tanggalSelesaiFormatted = endDate.toISOString().split('T')[0];
 
-    // Insert reservasi menggunakan Supabase
-    const { data: newReservasi, error } = await supabase
+    // Insert menggunakan service role key
+    const { data: newReservasi, error } = await supabaseAdmin
       .from('reservasi')
       .insert({
         user_id,
@@ -153,25 +161,19 @@ export async function POST(req: Request) {
     console.log('✅ Reservasi created:', insertedId);
 
     revalidatePath('/dashboard/reservasi');
-    console.log('✅ Cache dibersihkan untuk dashboard reservasi');
 
-    // ✅ KIRIM WHATSAPP KE ADMIN
+    // ✅ Kirim WhatsApp notifikasi
     try {
-      // Query detail untuk WhatsApp notification
-      const { data: reservasiDetail, error: detailError } = await supabase
+      const { data: reservasiDetail } = await supabaseAdmin
         .from('reservasi')
         .select(`
-          users:user_id (
-            nama_lengkap
-          ),
-          kost:kost_id (
-            nama
-          )
+          users:user_id (nama_lengkap),
+          kost:kost_id (nama)
         `)
         .eq('id', insertedId)
         .single();
 
-      if (!detailError && reservasiDetail) {
+      if (reservasiDetail) {
         await notifyAdminNewReservation({
           customerName: (reservasiDetail as any).users?.nama_lengkap || 'Unknown',
           kostName: (reservasiDetail as any).kost?.nama || 'Unknown',
@@ -180,11 +182,10 @@ export async function POST(req: Request) {
           totalHarga: total_harga,
         });
         
-        console.log('✅ Notifikasi WhatsApp terkirim ke admin');
+        console.log('✅ Notifikasi WhatsApp terkirim');
       }
     } catch (waError) {
-      console.error('⚠️ Gagal mengirim WhatsApp (non-blocking):', waError);
-      // Jangan gagalkan request jika WA gagal
+      console.error('⚠️ Gagal mengirim WhatsApp:', waError);
     }
 
     return NextResponse.json(
