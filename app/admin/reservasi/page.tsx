@@ -1,13 +1,10 @@
-// app/admin/reservasi/page.tsx - WITH DEBUG LOGS
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { useEffect, useState } from 'react';
 
 interface Reservasi {
   id: number;
-  user_id: number;
+  user_id: string;
   kost_id: number;
   tanggal_mulai: string;
   tanggal_selesai: string;
@@ -16,260 +13,69 @@ interface Reservasi {
   status: string;
   catatan: string | null;
   created_at: string;
-  nama_user: string;
-  email_user: string;
-  nama_kost: string;
-  alamat_kost: string;
+  pembayaran: string | null;
+  keterangan: string | null;
+  bukti_pembayaran: string | null;
+  users: {
+    email: string;
+    nama_lengkap: string;
+  } | null;
+  kost: {
+    nama: string;
+    harga: number;
+    alamat: string;
+    alamat_kost: string;
+  } | null;
 }
 
 export default function AdminReservasiPage() {
-  const router = useRouter();
   const [reservasi, setReservasi] = useState<Reservasi[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<string>('all');
-  const [updating, setUpdating] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState(new Date());
-  const [isRealTimeActive, setIsRealTimeActive] = useState(false);
+  const [filter, setFilter] = useState<string>('semua');
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
-  const fetchReservasi = useCallback(async () => {
+  const fetchReservasi = async () => {
     try {
       setLoading(true);
-      setError(null);
-      
-      console.log('🔄 Fetching reservasi data...');
-      
-      const timestamp = new Date().getTime();
-      const response = await fetch(`/api/admin/reservasi?_t=${timestamp}`, {
+      const response = await fetch('/api/reservasi', {
         cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-        },
       });
-
+      
+      if (!response.ok) throw new Error('Failed to fetch');
+      
       const data = await response.json();
       
-      console.log('📊 Reservasi response:', data);
-      
-      if (response.ok && data.success) {
-        const reservasiData = Array.isArray(data.data) ? data.data : [];
-        console.log('✅ Reservasi loaded:', reservasiData.length);
-        setReservasi(reservasiData);
+      if (data.success) {
+        setReservasi(data.data);
         setLastUpdate(new Date());
-      } else {
-        setError(data.message || 'Gagal memuat data reservasi');
-        setReservasi([]);
       }
     } catch (error) {
-      console.error('❌ Error fetching reservasi:', error);
-      setError('Terjadi kesalahan saat memuat data');
-      setReservasi([]);
+      console.error('Error:', error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
-    const userData = sessionStorage.getItem('user') || localStorage.getItem('user');
-    
-    if (!userData) {
-      router.push('/login');
-      return;
-    }
+    fetchReservasi();
+    const interval = setInterval(fetchReservasi, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
-    try {
-      const parsedUser = JSON.parse(userData);
-      
-      if (parsedUser.role !== 'admin') {
-        alert('Akses ditolak.');
-        router.push('/dashboard');
-        return;
-      }
-      
-      fetchReservasi();
-      
-      console.log('🔔 Setting up Real-time subscription...');
-      
-      const channel = supabase
-        .channel('admin-reservasi-channel')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'reservasi'
-          },
-          (payload) => {
-            console.log('🔥 REAL-TIME UPDATE DETECTED!', payload);
-            
-            if (payload.eventType === 'INSERT') {
-              console.log('➕ Reservasi BARU ditambahkan!');
-              showNotification('Reservasi Baru!', 'Ada reservasi baru masuk');
-            } else if (payload.eventType === 'UPDATE') {
-              console.log('✏️ Reservasi diupdate!');
-              showNotification('Reservasi Diupdate', 'Status reservasi berubah');
-            } else if (payload.eventType === 'DELETE') {
-              console.log('🗑️ Reservasi dihapus!');
-            }
-            
-            fetchReservasi();
-          }
-        )
-        .subscribe((status) => {
-          console.log('📡 Subscription status:', status);
-          
-          if (status === 'SUBSCRIBED') {
-            console.log('✅ Real-time ACTIVE!');
-            setIsRealTimeActive(true);
-          } else if (status === 'CLOSED') {
-            console.log('❌ Real-time CLOSED');
-            setIsRealTimeActive(false);
-          } else if (status === 'CHANNEL_ERROR') {
-            console.error('❌ Real-time CHANNEL ERROR');
-            setIsRealTimeActive(false);
-          }
-        });
+  const filteredReservasi = reservasi.filter(r => {
+    if (filter === 'semua') return true;
+    return r.status === filter;
+  });
 
-      return () => {
-        console.log('🔌 Cleaning up real-time subscription...');
-        supabase.removeChannel(channel);
-        setIsRealTimeActive(false);
-      };
-      
-    } catch (error) {
-      console.error('Error:', error);
-      router.push('/login');
-    }
-  }, [router, fetchReservasi]);
-
-  const showNotification = (title: string, body: string) => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'granted') {
-        new Notification(title, {
-          body,
-          icon: '/favicon.ico',
-        });
-      } else if (Notification.permission !== 'denied') {
-        Notification.requestPermission().then(permission => {
-          if (permission === 'granted') {
-            new Notification(title, { body });
-          }
-        });
-      }
-    }
+  const counts = {
+    semua: reservasi.length,
+    pending: reservasi.filter(r => r.status === 'pending').length,
+    confirmed: reservasi.filter(r => r.status === 'confirmed').length,
+    completed: reservasi.filter(r => r.status === 'completed').length,
+    cancelled: reservasi.filter(r => r.status === 'cancelled').length,
   };
 
-  // ✅ FUNCTION WITH DEBUG LOGS
-  const handleUpdateStatus = async (id: number, newStatus: string) => {
-    console.log('🔥 FUNCTION CALLED!', { 
-      id, 
-      newStatus, 
-      timestamp: new Date().toISOString(),
-      updating 
-    });
-    
-    if (!confirm(`Ubah status reservasi menjadi "${newStatus}"?`)) {
-      console.log('❌ User cancelled confirmation');
-      return;
-    }
-
-    console.log('✅ User confirmed, proceeding with update...');
-
-    if (updating) {
-      console.log('⏳ Already updating, please wait...');
-      return;
-    }
-
-    try {
-      setUpdating(true);
-      console.log(`🔄 Updating reservasi ${id} to ${newStatus}...`);
-      
-      const response = await fetch(`/api/admin/reservasi/${id}?nocache=${Date.now()}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
-      const data = await response.json();
-      console.log('📡 Update response:', data);
-
-      if (response.ok && data.success) {
-        console.log('✅ Update successful!');
-        console.log('🧹 Clearing all caches...');
-        
-        // ✅ SOLUSI NUCLEAR: Clear semua cache browser
-        if ('caches' in window) {
-          caches.keys().then(names => {
-            console.log('🗑️ Deleting caches:', names);
-            names.forEach(name => caches.delete(name));
-          });
-        }
-        
-        // Clear sessionStorage & localStorage (kecuali user data)
-        const userData = sessionStorage.getItem('user') || localStorage.getItem('user');
-        sessionStorage.clear();
-        localStorage.clear();
-        if (userData) {
-          sessionStorage.setItem('user', userData);
-        }
-        
-        console.log('✅ Cache cleared!');
-        console.log('🔄 Force redirecting...');
-        
-        // Tunggu sebentar untuk memastikan cache terhapus
-        setTimeout(() => {
-          // Force redirect dengan timestamp
-          window.location.href = `/admin/reservasi?cleared=true&t=${Date.now()}`;
-        }, 200);
-        
-      } else {
-        console.error('❌ Update failed:', data);
-        alert('❌ ' + (data.message || 'Gagal mengupdate status'));
-        setUpdating(false);
-      }
-    } catch (error) {
-      console.error('❌ Error updating status:', error);
-      alert('❌ Terjadi kesalahan saat mengupdate status');
-      setUpdating(false);
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return '#f59e0b';
-      case 'confirmed':
-        return '#10b981';
-      case 'completed':
-        return '#6b7280';
-      case 'cancelled':
-        return '#ef4444';
-      default:
-        return '#6b7280';
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return 'Pending';
-      case 'confirmed':
-        return 'Confirmed';
-      case 'completed':
-        return 'Completed';
-      case 'cancelled':
-        return 'Cancelled';
-      default:
-        return status;
-    }
-  };
-
-  const formatCurrency = (amount: number) => {
+  const formatRupiah = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
@@ -279,546 +85,657 @@ export default function AdminReservasiPage() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('id-ID', {
-      year: 'numeric',
-      month: 'short',
       day: 'numeric',
+      month: 'short',
+      year: 'numeric',
     });
   };
 
-  const filteredReservasi = filter === 'all' 
-    ? reservasi 
-    : reservasi.filter(r => r.status.toLowerCase() === filter);
+  const StatusBadge = ({ status }: { status: string }) => {
+    const colors = {
+      pending: '#f59e0b',
+      confirmed: '#3b82f6',
+      completed: '#10b981',
+      cancelled: '#ef4444',
+    };
+
+    return (
+      <span style={{
+        backgroundColor: colors[status as keyof typeof colors],
+        color: 'white',
+        padding: '6px 16px',
+        borderRadius: '20px',
+        fontSize: '14px',
+        fontWeight: '600',
+      }}>
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </span>
+    );
+  };
 
   if (loading && reservasi.length === 0) {
     return (
-      <div style={styles.loadingContainer}>
-        <div style={styles.spinner}></div>
-        <p>Memuat data reservasi...</p>
+      <div style={{
+        minHeight: '100vh',
+        backgroundColor: '#f9fafb',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '48px',
+            height: '48px',
+            border: '3px solid #e5e7eb',
+            borderTop: '3px solid #2563eb',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto'
+          }}></div>
+          <p style={{ marginTop: '16px', color: '#6b7280' }}>Memuat data...</p>
+        </div>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     );
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <div>
-          <h1 style={styles.title}>Kelola Reservasi</h1>
-          <p style={styles.subtitle}>Manage semua reservasi pengguna</p>
-        </div>
-        
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            padding: '0.75rem 1.25rem',
-            background: isRealTimeActive ? '#d1fae5' : '#fee2e2',
-            borderRadius: '10px',
-            border: `2px solid ${isRealTimeActive ? '#10b981' : '#ef4444'}`,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#f9fafb',
+      padding: '32px'
+    }}>
+      <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
+        {/* Header */}
+        <div style={{ marginBottom: '32px' }}>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'flex-start',
+            marginBottom: '24px',
+            flexWrap: 'wrap',
+            gap: '16px'
           }}>
-            <div style={{
-              width: '10px',
-              height: '10px',
-              borderRadius: '50%',
-              background: isRealTimeActive ? '#10b981' : '#ef4444',
-              animation: isRealTimeActive ? 'pulse 2s infinite' : 'none'
-            }}></div>
-            <span style={{
-              fontSize: '0.9rem',
-              fontWeight: 700,
-              color: isRealTimeActive ? '#047857' : '#dc2626'
-            }}>
-              {isRealTimeActive ? '🟢 Real-time Active' : '🔴 Real-time Inactive'}
-            </span>
+            <div>
+              <h1 style={{ 
+                fontSize: '36px', 
+                fontWeight: 'bold', 
+                color: '#111827',
+                marginBottom: '8px'
+              }}>
+                Kelola Reservasi
+              </h1>
+              <p style={{ color: '#6b7280', marginBottom: '12px' }}>
+                Manage semua reservasi pengguna
+              </p>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '12px',
+                marginBottom: '8px'
+              }}>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px',
+                  padding: '8px 16px',
+                  backgroundColor: '#d1fae5',
+                  borderRadius: '8px',
+                  border: '2px solid #10b981'
+                }}>
+                  <div style={{ 
+                    width: '8px', 
+                    height: '8px', 
+                    backgroundColor: '#10b981', 
+                    borderRadius: '50%',
+                    animation: 'pulse 2s infinite'
+                  }}></div>
+                  <div style={{ 
+                    width: '8px', 
+                    height: '8px', 
+                    backgroundColor: '#10b981', 
+                    borderRadius: '50%',
+                    animation: 'pulse 2s infinite',
+                    animationDelay: '0.5s'
+                  }}></div>
+                  <span style={{ 
+                    color: '#059669', 
+                    fontWeight: '600',
+                    fontSize: '14px'
+                  }}>
+                    Real-time Active
+                  </span>
+                </div>
+              </div>
+              <p style={{ fontSize: '13px', color: '#9ca3af' }}>
+                📅 Update terakhir: {lastUpdate.toLocaleTimeString('id-ID')}
+              </p>
+            </div>
+            
+            <button
+              onClick={fetchReservasi}
+              disabled={loading}
+              style={{
+                padding: '12px 24px',
+                backgroundColor: loading ? '#9ca3af' : '#2563eb',
+                color: 'white',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontWeight: '600',
+                fontSize: '14px',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                transition: 'all 0.3s'
+              }}
+              onMouseOver={(e) => {
+                if (!loading) e.currentTarget.style.backgroundColor = '#1d4ed8';
+              }}
+              onMouseOut={(e) => {
+                if (!loading) e.currentTarget.style.backgroundColor = '#2563eb';
+              }}
+            >
+              🔄 Refresh Manual
+            </button>
           </div>
-          <span style={{ fontSize: '0.8rem', color: '#666' }}>
-            📅 Update terakhir: {lastUpdate.toLocaleTimeString('id-ID')}
-          </span>
+
           <button
-            onClick={fetchReservasi}
-            disabled={loading}
+            onClick={() => window.history.back()}
             style={{
-              padding: '0.65rem 1.25rem',
-              background: '#2563eb',
-              color: 'white',
+              color: '#2563eb',
+              fontWeight: '500',
               border: 'none',
-              borderRadius: '8px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              fontWeight: 600,
-              fontSize: '0.9rem',
-              opacity: loading ? 0.6 : 1,
-              transition: 'all 0.3s'
+              background: 'none',
+              cursor: 'pointer',
+              fontSize: '14px',
+              marginBottom: '24px'
             }}
           >
-            {loading ? '⏳ Loading...' : '🔄 Refresh Manual'}
+            ← Kembali ke Dashboard
           </button>
         </div>
-      </div>
 
-      <div style={styles.backLink}>
-        <a href="/admin" style={styles.link}>← Kembali ke Dashboard</a>
-      </div>
-
-      <div style={styles.filterBar}>
-        <button
-          onClick={() => setFilter('all')}
-          style={{
-            ...styles.filterBtn,
-            ...(filter === 'all' ? styles.filterBtnActive : {})
-          }}
-        >
-          Semua ({reservasi.length})
-        </button>
-        <button
-          onClick={() => setFilter('pending')}
-          style={{
-            ...styles.filterBtn,
-            ...(filter === 'pending' ? styles.filterBtnActive : {})
-          }}
-        >
-          Pending ({reservasi.filter(r => r.status === 'pending').length})
-        </button>
-        <button
-          onClick={() => setFilter('confirmed')}
-          style={{
-            ...styles.filterBtn,
-            ...(filter === 'confirmed' ? styles.filterBtnActive : {})
-          }}
-        >
-          Confirmed ({reservasi.filter(r => r.status === 'confirmed').length})
-        </button>
-        <button
-          onClick={() => setFilter('completed')}
-          style={{
-            ...styles.filterBtn,
-            ...(filter === 'completed' ? styles.filterBtnActive : {})
-          }}
-        >
-          Completed ({reservasi.filter(r => r.status === 'completed').length})
-        </button>
-        <button
-          onClick={() => setFilter('cancelled')}
-          style={{
-            ...styles.filterBtn,
-            ...(filter === 'cancelled' ? styles.filterBtnActive : {})
-          }}
-        >
-          Cancelled ({reservasi.filter(r => r.status === 'cancelled').length})
-        </button>
-      </div>
-
-      {error && (
-        <div style={styles.errorAlert}>
-          <span>⚠️</span>
-          <span>{error}</span>
-        </div>
-      )}
-
-      {filteredReservasi.length === 0 ? (
-        <div style={styles.emptyState}>
-          <div style={styles.emptyIcon}>📋</div>
-          <h2>Tidak Ada Reservasi</h2>
-          <p>Belum ada reservasi {filter !== 'all' ? `dengan status ${filter}` : ''}</p>
-        </div>
-      ) : (
-        <div style={styles.reservasiList}>
-          {filteredReservasi.map((item) => (
-            <div key={item.id} style={styles.reservasiCard}>
-              <div style={styles.cardHeader}>
-                <div>
-                  <h3 style={styles.kostName}>{item.nama_kost}</h3>
-                  <p style={styles.userName}>👤 {item.nama_user} ({item.email_user})</p>
-                  <p style={styles.location}>📍 {item.alamat_kost}</p>
-                </div>
-                <span style={{
-                  ...styles.statusBadge,
-                  background: getStatusColor(item.status)
-                }}>
-                  {getStatusText(item.status)}
-                </span>
-              </div>
-
-              <div style={styles.cardBody}>
-                <div style={styles.infoGrid}>
-                  <div style={styles.infoItem}>
-                    <span style={styles.infoLabel}>ID Reservasi:</span>
-                    <span style={styles.infoValue}>#{item.id}</span>
-                  </div>
-                  <div style={styles.infoItem}>
-                    <span style={styles.infoLabel}>Status Saat Ini:</span>
-                    <span style={{...styles.infoValue, fontWeight: 600, color: getStatusColor(item.status)}}>
-                      {item.status.toUpperCase()}
-                    </span>
-                  </div>
-                  <div style={styles.infoItem}>
-                    <span style={styles.infoLabel}>Durasi:</span>
-                    <span style={styles.infoValue}>{item.durasi_bulan} Bulan</span>
-                  </div>
-                  <div style={styles.infoItem}>
-                    <span style={styles.infoLabel}>Total Harga:</span>
-                    <span style={styles.infoValue}>{formatCurrency(item.total_harga)}</span>
-                  </div>
-                  <div style={styles.infoItem}>
-                    <span style={styles.infoLabel}>Tanggal Mulai:</span>
-                    <span style={styles.infoValue}>{formatDate(item.tanggal_mulai)}</span>
-                  </div>
-                  <div style={styles.infoItem}>
-                    <span style={styles.infoLabel}>Tanggal Selesai:</span>
-                    <span style={styles.infoValue}>{formatDate(item.tanggal_selesai)}</span>
-                  </div>
-                  <div style={styles.infoItem}>
-                    <span style={styles.infoLabel}>Tanggal Booking:</span>
-                    <span style={styles.infoValue}>{formatDate(item.created_at)}</span>
-                  </div>
-                </div>
-
-                {item.catatan && (
-                  <div style={styles.catatan}>
-                    <strong>Catatan:</strong>
-                    <p>{item.catatan}</p>
-                  </div>
-                )}
-              </div>
-
-              <div style={styles.cardFooter}>
-                {item.status.toLowerCase() === 'pending' ? (
-                  <>
-                    <strong style={{ marginBottom: '0.75rem', display: 'block' }}>Ubah Status:</strong>
-                    <div style={styles.actionBtns}>
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          console.log('🎯 CONFIRM BUTTON CLICKED!', { 
-                            id: item.id, 
-                            currentStatus: item.status,
-                            targetStatus: 'confirmed'
-                          });
-                          handleUpdateStatus(item.id, 'confirmed');
-                        }}
-                        disabled={updating}
-                        style={{
-                          ...styles.confirmBtn,
-                          cursor: updating ? 'not-allowed' : 'pointer',
-                          opacity: updating ? 0.6 : 1,
-                        }}
-                      >
-                        {updating ? '⏳ Processing...' : '✓ Konfirmasi'}
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          console.log('🎯 CANCEL BUTTON CLICKED!', { 
-                            id: item.id, 
-                            currentStatus: item.status,
-                            targetStatus: 'cancelled'
-                          });
-                          handleUpdateStatus(item.id, 'cancelled');
-                        }}
-                        disabled={updating}
-                        style={{
-                          ...styles.cancelBtn,
-                          cursor: updating ? 'not-allowed' : 'pointer',
-                          opacity: updating ? 0.6 : 1,
-                        }}
-                      >
-                        {updating ? '⏳ Processing...' : '✗ Tolak'}
-                      </button>
-                    </div>
-                  </>
-                ) : item.status.toLowerCase() === 'confirmed' ? (
-                  <>
-                    <div style={{
-                      ...styles.statusInfoBox,
-                      background: '#d1fae5',
-                      borderLeft: '4px solid #10b981'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                        <span style={{ fontSize: '1.5rem' }}>✅</span>
-                        <strong style={{ color: '#065f46' }}>Reservasi Dikonfirmasi</strong>
-                      </div>
-                      <p style={{ fontSize: '0.85rem', color: '#047857', margin: 0 }}>
-                        Reservasi ini telah dikonfirmasi dan menunggu penyelesaian.
-                      </p>
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        console.log('🎯 COMPLETE BUTTON CLICKED!', { 
-                          id: item.id, 
-                          currentStatus: item.status,
-                          targetStatus: 'completed'
-                        });
-                        handleUpdateStatus(item.id, 'completed');
-                      }}
-                      disabled={updating}
-                      style={{
-                        ...styles.completeBtn,
-                        cursor: updating ? 'not-allowed' : 'pointer',
-                        opacity: updating ? 0.6 : 1,
-                        marginTop: '0.75rem',
-                        width: '100%'
-                      }}
-                    >
-                      {updating ? '⏳ Processing...' : '✓ Tandai Selesai'}
-                    </button>
-                  </>
-                ) : item.status.toLowerCase() === 'completed' ? (
-                  <div style={{
-                    ...styles.statusInfoBox,
-                    background: '#f3f4f6',
-                    borderLeft: '4px solid #6b7280'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                      <span style={{ fontSize: '1.5rem' }}>✓</span>
-                      <strong style={{ color: '#374151' }}>Reservasi Selesai</strong>
-                    </div>
-                    <p style={{ fontSize: '0.85rem', color: '#4b5563', margin: 0 }}>
-                      Reservasi ini telah selesai dan tidak dapat diubah lagi.
-                    </p>
-                  </div>
-                ) : item.status.toLowerCase() === 'cancelled' ? (
-                  <div style={{
-                    ...styles.statusInfoBox,
-                    background: '#fee2e2',
-                    borderLeft: '4px solid #ef4444'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                      <span style={{ fontSize: '1.5rem' }}>✗</span>
-                      <strong style={{ color: '#991b1b' }}>Reservasi Dibatalkan</strong>
-                    </div>
-                    <p style={{ fontSize: '0.85rem', color: '#dc2626', margin: 0 }}>
-                      Reservasi ini telah dibatalkan dan tidak dapat diubah lagi.
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-            </div>
+        {/* Filter Tabs */}
+        <div style={{ 
+          display: 'flex', 
+          gap: '12px', 
+          marginBottom: '32px',
+          flexWrap: 'wrap'
+        }}>
+          {[
+            { key: 'semua', label: 'Semua', count: counts.semua },
+            { key: 'pending', label: 'Pending', count: counts.pending },
+            { key: 'confirmed', label: 'Confirmed', count: counts.confirmed },
+            { key: 'completed', label: 'Completed', count: counts.completed },
+            { key: 'cancelled', label: 'Cancelled', count: counts.cancelled },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setFilter(tab.key)}
+              style={{
+                padding: '10px 24px',
+                backgroundColor: filter === tab.key ? '#dc2626' : 'white',
+                color: filter === tab.key ? 'white' : '#374151',
+                border: filter === tab.key ? 'none' : '1px solid #d1d5db',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: '600',
+                fontSize: '14px',
+                boxShadow: filter === tab.key ? '0 4px 6px rgba(220,38,38,0.3)' : 'none',
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => {
+                if (filter !== tab.key) {
+                  e.currentTarget.style.backgroundColor = '#f9fafb';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (filter !== tab.key) {
+                  e.currentTarget.style.backgroundColor = 'white';
+                }
+              }}
+            >
+              {tab.label} ({tab.count})
+            </button>
           ))}
         </div>
-      )}
-      
+
+        {/* Reservasi List */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {filteredReservasi.length === 0 ? (
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              padding: '48px',
+              textAlign: 'center',
+              color: '#6b7280',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+            }}>
+              Tidak ada reservasi dengan status "{filter}"
+            </div>
+          ) : (
+            filteredReservasi.map((item) => (
+              <div key={item.id} style={{
+                backgroundColor: 'white',
+                borderRadius: '16px',
+                padding: '32px',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                border: '1px solid #e5e7eb',
+                transition: 'box-shadow 0.3s'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.15)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+              }}>
+                {/* Header Card */}
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'flex-start',
+                  marginBottom: '24px',
+                  flexWrap: 'wrap',
+                  gap: '16px'
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <h3 style={{ 
+                      fontSize: '24px', 
+                      fontWeight: 'bold', 
+                      color: '#111827',
+                      marginBottom: '16px'
+                    }}>
+                      {item.kost?.nama || 'Kost tidak ditemukan'}
+                    </h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '18px' }}>👤</span>
+                        <span style={{ fontWeight: '600', color: '#1f2937' }}>
+                          {item.users?.nama_lengkap || 'Nama tidak tersedia'}
+                        </span>
+                        <span style={{ color: '#6b7280', fontSize: '14px' }}>
+                          ({item.users?.email || 'Email tidak tersedia'})
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '18px' }}>📍</span>
+                        <span style={{ color: '#4b5563', fontSize: '14px' }}>
+                          {item.kost?.alamat || item.kost?.alamat_kost || 'Alamat tidak tersedia'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <StatusBadge status={item.status} />
+                </div>
+
+                <div style={{
+                  textTransform: 'uppercase',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  color: '#111827',
+                  marginBottom: '16px',
+                  letterSpacing: '0.5px'
+                }}>
+                  {item.status}
+                </div>
+
+                {/* Detail Grid */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '24px',
+                  padding: '24px 0',
+                  borderTop: '1px solid #e5e7eb',
+                  borderBottom: '1px solid #e5e7eb'
+                }}>
+                  <div>
+                    <p style={{ 
+                      fontSize: '13px', 
+                      color: '#6b7280', 
+                      marginBottom: '4px',
+                      fontWeight: '500'
+                    }}>
+                      ID Reservasi:
+                    </p>
+                    <p style={{ fontWeight: 'bold', color: '#111827', fontSize: '18px' }}>
+                      #{item.id}
+                    </p>
+                  </div>
+                  <div>
+                    <p style={{ 
+                      fontSize: '13px', 
+                      color: '#6b7280', 
+                      marginBottom: '4px',
+                      fontWeight: '500'
+                    }}>
+                      Status Saat Ini:
+                    </p>
+                    <p style={{ 
+                      fontWeight: 'bold', 
+                      color: '#f59e0b', 
+                      fontSize: '18px',
+                      textTransform: 'uppercase'
+                    }}>
+                      {item.status}
+                    </p>
+                  </div>
+                  <div>
+                    <p style={{ 
+                      fontSize: '13px', 
+                      color: '#6b7280', 
+                      marginBottom: '4px',
+                      fontWeight: '500'
+                    }}>
+                      Durasi:
+                    </p>
+                    <p style={{ fontWeight: 'bold', color: '#111827', fontSize: '18px' }}>
+                      {item.durasi_bulan} Bulan
+                    </p>
+                  </div>
+                  <div>
+                    <p style={{ 
+                      fontSize: '13px', 
+                      color: '#6b7280', 
+                      marginBottom: '4px',
+                      fontWeight: '500'
+                    }}>
+                      Total Harga:
+                    </p>
+                    <p style={{ fontWeight: 'bold', color: '#111827', fontSize: '18px' }}>
+                      {formatRupiah(item.total_harga)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Tanggal Info */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                  gap: '24px',
+                  marginTop: '24px'
+                }}>
+                  <div>
+                    <p style={{ 
+                      fontSize: '13px', 
+                      color: '#6b7280', 
+                      marginBottom: '4px',
+                      fontWeight: '500'
+                    }}>
+                      Tanggal Mulai:
+                    </p>
+                    <p style={{ fontWeight: '600', color: '#111827' }}>
+                      {formatDate(item.tanggal_mulai)}
+                    </p>
+                  </div>
+                  <div>
+                    <p style={{ 
+                      fontSize: '13px', 
+                      color: '#6b7280', 
+                      marginBottom: '4px',
+                      fontWeight: '500'
+                    }}>
+                      Tanggal Selesai:
+                    </p>
+                    <p style={{ fontWeight: '600', color: '#111827' }}>
+                      {formatDate(item.tanggal_selesai)}
+                    </p>
+                  </div>
+                  <div>
+                    <p style={{ 
+                      fontSize: '13px', 
+                      color: '#6b7280', 
+                      marginBottom: '4px',
+                      fontWeight: '500'
+                    }}>
+                      Tanggal Booking:
+                    </p>
+                    <p style={{ fontWeight: '600', color: '#111827' }}>
+                      {formatDate(item.created_at)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Catatan */}
+                {item.catatan && (
+                  <div style={{
+                    marginTop: '24px',
+                    padding: '16px',
+                    backgroundColor: '#dbeafe',
+                    borderRadius: '8px',
+                    border: '1px solid #93c5fd'
+                  }}>
+                    <p style={{ 
+                      fontSize: '13px', 
+                      color: '#1e40af', 
+                      marginBottom: '4px',
+                      fontWeight: '600'
+                    }}>
+                      Catatan:
+                    </p>
+                    <p style={{ color: '#1e3a8a' }}>{item.catatan}</p>
+                  </div>
+                )}
+
+                {/* Bukti Pembayaran */}
+                {item.bukti_pembayaran && (
+                  <div style={{ marginTop: '16px' }}>
+                    <a
+                      href={item.bukti_pembayaran}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        color: '#2563eb',
+                        fontWeight: '500',
+                        textDecoration: 'underline',
+                        fontSize: '14px'
+                      }}
+                    >
+                      📎 Lihat Bukti Transfer
+                    </a>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div style={{
+                  marginTop: '24px',
+                  paddingTop: '24px',
+                  borderTop: '1px solid #e5e7eb',
+                  display: 'flex',
+                  gap: '12px',
+                  flexWrap: 'wrap'
+                }}>
+                  {item.status === 'pending' && (
+                    <>
+                      <button
+                        onClick={async () => {
+                          if (confirm('Konfirmasi reservasi ini?')) {
+                            try {
+                              const response = await fetch(`/api/reservasi/${item.id}`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ status: 'confirmed' }),
+                              });
+                              if (response.ok) {
+                                alert('Reservasi berhasil dikonfirmasi!');
+                                fetchReservasi();
+                              } else {
+                                alert('Gagal mengkonfirmasi reservasi');
+                              }
+                            } catch (error) {
+                              console.error('Error:', error);
+                              alert('Terjadi kesalahan');
+                            }
+                          }
+                        }}
+                        style={{
+                          padding: '12px 24px',
+                          backgroundColor: '#10b981',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontWeight: '600',
+                          fontSize: '14px',
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 4px rgba(16,185,129,0.3)',
+                          transition: 'all 0.2s'
+                        }}
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.backgroundColor = '#059669';
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                          e.currentTarget.style.boxShadow = '0 4px 8px rgba(16,185,129,0.4)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.backgroundColor = '#10b981';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = '0 2px 4px rgba(16,185,129,0.3)';
+                        }}
+                      >
+                        ✅ Konfirmasi
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const reason = prompt('Alasan penolakan (opsional):');
+                          if (reason !== null) {
+                            if (confirm('Tolak reservasi ini?')) {
+                              try {
+                                const response = await fetch(`/api/reservasi/${item.id}`, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ 
+                                    status: 'cancelled',
+                                    keterangan: reason || 'Ditolak oleh admin'
+                                  }),
+                                });
+                                if (response.ok) {
+                                  alert('Reservasi berhasil ditolak!');
+                                  fetchReservasi();
+                                } else {
+                                  alert('Gagal menolak reservasi');
+                                }
+                              } catch (error) {
+                                console.error('Error:', error);
+                                alert('Terjadi kesalahan');
+                              }
+                            }
+                          }
+                        }}
+                        style={{
+                          padding: '12px 24px',
+                          backgroundColor: '#ef4444',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontWeight: '600',
+                          fontSize: '14px',
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 4px rgba(239,68,68,0.3)',
+                          transition: 'all 0.2s'
+                        }}
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.backgroundColor = '#dc2626';
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                          e.currentTarget.style.boxShadow = '0 4px 8px rgba(239,68,68,0.4)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.backgroundColor = '#ef4444';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = '0 2px 4px rgba(239,68,68,0.3)';
+                        }}
+                      >
+                        ❌ Tolak
+                      </button>
+                    </>
+                  )}
+
+                  {item.status === 'confirmed' && (
+                    <button
+                      onClick={async () => {
+                        if (confirm('Tandai reservasi ini sebagai selesai?')) {
+                          try {
+                            const response = await fetch(`/api/reservasi/${item.id}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ status: 'completed' }),
+                            });
+                            if (response.ok) {
+                              alert('Reservasi berhasil diselesaikan!');
+                              fetchReservasi();
+                            } else {
+                              alert('Gagal menyelesaikan reservasi');
+                            }
+                          } catch (error) {
+                            console.error('Error:', error);
+                            alert('Terjadi kesalahan');
+                          }
+                        }
+                      }}
+                      style={{
+                        padding: '12px 24px',
+                        backgroundColor: '#3b82f6',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontWeight: '600',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 4px rgba(59,130,246,0.3)',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.backgroundColor = '#2563eb';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 4px 8px rgba(59,130,246,0.4)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.backgroundColor = '#3b82f6';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 2px 4px rgba(59,130,246,0.3)';
+                      }}
+                    >
+                      ✔️ Selesaikan
+                    </button>
+                  )}
+
+                  {(item.status === 'completed' || item.status === 'cancelled') && (
+                    <div style={{
+                      padding: '12px 24px',
+                      backgroundColor: '#f3f4f6',
+                      color: '#6b7280',
+                      borderRadius: '8px',
+                      fontWeight: '600',
+                      fontSize: '14px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      {item.status === 'completed' ? '✅ Selesai' : '🚫 Dibatalkan'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
       <style>{`
         @keyframes pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.6; transform: scale(1.1); }
-        }
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
+          0%, 100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.5;
+          }
         }
       `}</style>
     </div>
   );
 }
-
-const styles: { [key: string]: React.CSSProperties } = {
-  container: {
-    padding: '2rem',
-    maxWidth: '1400px',
-    margin: '0 auto',
-  },
-  loadingContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: '50vh',
-    gap: '1rem',
-  },
-  spinner: {
-    width: '40px',
-    height: '40px',
-    border: '4px solid #e5e7eb',
-    borderTop: '4px solid #dc2626',
-    borderRadius: '50%',
-    animation: 'spin 1s linear infinite',
-  },
-  header: {
-    marginBottom: '2rem',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
-    gap: '1rem',
-  },
-  title: {
-    fontSize: '2rem',
-    color: '#333',
-    marginBottom: '0.5rem',
-  },
-  subtitle: {
-    color: '#666',
-  },
-  backLink: {
-    marginBottom: '1.5rem',
-  },
-  link: {
-    color: '#2563eb',
-    textDecoration: 'none',
-    fontWeight: 600,
-  },
-  filterBar: {
-    display: 'flex',
-    gap: '1rem',
-    marginBottom: '2rem',
-    flexWrap: 'wrap',
-  },
-  filterBtn: {
-    padding: '0.75rem 1.5rem',
-    background: 'white',
-    border: '2px solid #e5e7eb',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontWeight: 600,
-    color: '#666',
-    transition: 'all 0.3s',
-  },
-  filterBtnActive: {
-    background: '#dc2626',
-    color: 'white',
-    borderColor: '#dc2626',
-  },
-  errorAlert: {
-    background: '#fef2f2',
-    border: '1px solid #fecaca',
-    borderRadius: '12px',
-    padding: '1rem',
-    marginBottom: '1.5rem',
-    display: 'flex',
-    gap: '1rem',
-    color: '#991b1b',
-  },
-  emptyState: {
-    textAlign: 'center',
-    padding: '4rem 2rem',
-    background: 'white',
-    borderRadius: '15px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-  },
-  emptyIcon: {
-    fontSize: '5rem',
-    marginBottom: '1rem',
-  },
-  reservasiList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1.5rem',
-  },
-  reservasiCard: {
-    background: 'white',
-    borderRadius: '15px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-    overflow: 'hidden',
-    transition: 'all 0.3s',
-  },
-  cardHeader: {
-    padding: '1.5rem',
-    background: '#f9fafb',
-    borderBottom: '1px solid #e5e7eb',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'start',
-  },
-  kostName: {
-    fontSize: '1.3rem',
-    color: '#333',
-    marginBottom: '0.5rem',
-    fontWeight: 'bold',
-  },
-  userName: {
-    color: '#666',
-    fontSize: '0.95rem',
-    marginBottom: '0.25rem',
-  },
-  location: {
-    color: '#666',
-    fontSize: '0.9rem',
-  },
-  statusBadge: {
-    padding: '0.5rem 1rem',
-    borderRadius: '20px',
-    color: 'white',
-    fontSize: '0.85rem',
-    fontWeight: 600,
-  },
-  cardBody: {
-    padding: '1.5rem',
-  },
-  infoGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-    gap: '1rem',
-    marginBottom: '1rem',
-  },
-  infoItem: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: '0.75rem',
-    background: '#f9fafb',
-    borderRadius: '8px',
-  },
-  infoLabel: {
-    fontWeight: 600,
-    color: '#666',
-  },
-  infoValue: {
-    color: '#333',
-  },
-  catatan: {
-    background: '#fffbeb',
-    padding: '1rem',
-    borderRadius: '8px',
-    borderLeft: '4px solid #f59e0b',
-    marginTop: '1rem',
-  },
-  cardFooter: {
-    padding: '1rem 1.5rem',
-    background: '#f9fafb',
-    borderTop: '1px solid #e5e7eb',
-  },
-  actionBtns: {
-    display: 'flex',
-    gap: '1rem',
-    marginTop: '0.5rem',
-    flexWrap: 'wrap',
-  },
-  confirmBtn: {
-    padding: '0.75rem 1.5rem',
-    background: '#10b981',
-    color: 'white',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontWeight: 600,
-    transition: 'all 0.3s',
-  },
-  cancelBtn: {
-    padding: '0.75rem 1.5rem',
-    background: '#ef4444',
-    color: 'white',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontWeight: 600,
-    transition: 'all 0.3s',
-  },
-  completeBtn: {
-    padding: '0.75rem 1.5rem',
-    background: '#6b7280',
-    color: 'white',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontWeight: 600,
-    transition: 'all 0.3s',
-  },
-  statusInfoBox: {
-    padding: '1rem',
-    borderRadius: '10px',
-    marginBottom: '0.5rem',
-  },
-};
